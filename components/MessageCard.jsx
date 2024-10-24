@@ -1,56 +1,121 @@
-// /components/MessageCard.jsx
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { theme } from "../constants/theme";
-import { hp, wp } from "../helpers/common";
-import Avatar from "./Avatar"; // Assuming you have an Avatar component
+import Avatar from "./Avatar";
+import { formatDistanceToNow } from "date-fns";
 
-const MessageCard = ({ message }) => {
+const MessageCard = ({ conversation, onPress, currentUserId }) => {
+  const {
+    other_user_avatar,
+    other_user_name,
+    last_message,
+    updated_at,
+    unread_count,
+    last_sender_id,
+  } = conversation;
+
+  const isUnread = unread_count > 0 && last_sender_id !== currentUserId;
+
   return (
-    <TouchableOpacity style={styles.container}>
-      {/* Avatar and message info */}
-      <Avatar size={hp(5)} uri={message.userImage} rounded={theme.radius.md} />
-      <View style={styles.info}>
-        <Text style={styles.username}>{message.user}</Text>
-        <Text style={styles.message}>{message.message}</Text>
+    <TouchableOpacity
+      style={[styles.container, isUnread && styles.unreadContainer]}
+      onPress={onPress}
+    >
+      <Avatar uri={other_user_avatar} size={50} style={styles.avatar} />
+
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <Text style={[styles.name, isUnread && styles.unreadText]}>
+            {other_user_name}
+          </Text>
+          <Text style={styles.time}>
+            {formatDistanceToNow(new Date(updated_at), { addSuffix: true })}
+          </Text>
+        </View>
+
+        <View style={styles.messageRow}>
+          <Text
+            style={[styles.message, isUnread && styles.unreadText]}
+            numberOfLines={1}
+          >
+            {last_message}
+          </Text>
+          {isUnread && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadCount}>{unread_count}</Text>
+            </View>
+          )}
+        </View>
       </View>
-      <Text style={styles.time}>{message.time}</Text>
     </TouchableOpacity>
   );
 };
 
-export default MessageCard;
-
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    padding: wp(4),
-    borderRadius: theme.radius.xxl,
+    padding: 12,
     backgroundColor: theme.colors.white,
-    marginBottom: hp(1.5),
+    borderRadius: 12,
+    marginBottom: 8,
     alignItems: "center",
-    borderWidth: 0.5,
-    borderColor: theme.colors.gray,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 1,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  info: {
+  unreadContainer: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  avatar: {
+    marginRight: 12,
+  },
+  content: {
     flex: 1,
-    marginLeft: wp(3),
   },
-  username: {
-    fontSize: hp(2.2),
-    fontWeight: theme.fonts.medium,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: "500",
     color: theme.colors.text,
   },
-  message: {
-    fontSize: hp(1.8),
+  time: {
+    fontSize: 12,
     color: theme.colors.textLight,
   },
-  time: {
-    fontSize: hp(1.5),
-    color: theme.colors.gray,
+  messageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  message: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.colors.textLight,
+    marginRight: 8,
+  },
+  unreadText: {
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  unreadBadge: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  unreadCount: {
+    color: theme.colors.white,
+    fontSize: 12,
+    fontWeight: "600",
   },
 });
+
+export default MessageCard;

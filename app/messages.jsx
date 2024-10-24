@@ -1,121 +1,181 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { theme } from "../constants/theme";
 import Icon from "../assets/icons";
 import ScreenWrapper from "../components/ScreenWrapper";
-import { fetchMessages } from "../services/messageService";
-import { fetchUsers } from "../services/userService";
-import { useRouter } from "expo-router"; // Import useRouter from expo-router
+import MessageCard from "../components/MessageCard";
+import FloatingButton from "../components/FloatingButton";
+import {
+  fetchConversations,
+  subscribeToMessages,
+} from "../services/messageService";
+import { useRouter } from "expo-router";
 
 const Messages = () => {
-  const [messages, setMessages] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const router = useRouter(); // Use the router hook
+  const router = useRouter();
 
   useEffect(() => {
-    const getMessages = async () => {
-      const res = await fetchMessages(user.id);
-      if (res.success) setMessages(res.data);
-    };
-    getMessages();
-  }, []);
+    let messageSubscription;
 
-  const handleUserPress = (userId) => {
-    router.push(`/chat/${userId}`); // Navigate to the chat with the selected user
+    const loadConversations = async () => {
+      try {
+        setLoading(true);
+        const result = await fetchConversations(user.id);
+        if (result.success) {
+          setConversations(result.data);
+        }
+      } catch (error) {
+        console.error("Error loading conversations:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Set up real-time subscription
+    const setupSubscription = () => {
+      messageSubscription = subscribeToMessages(user.id, (payload) => {
+        // Update conversations when new message arrives
+        if (payload.new) {
+          setConversations((prevConversations) => {
+            const newMessage = payload.new;
+            const existingIndex = prevConversations.findIndex(
+              (conv) => conv.id === newMessage.conversation_id
+            );
+
+            if (existingIndex >= 0) {
+              // Update existing conversation
+              const updatedConversations = [...prevConversations];
+              updatedConversations[existingIndex] = {
+                ...updatedConversations[existingIndex],
+                last_message: newMessage.message_text,
+                updated_at: newMessage.created_at,
+              };
+              return updatedConversations;
+            }
+            // New conversation will be added on next fetch
+            return prevConversations;
+          });
+        }
+      });
+    };
+
+    loadConversations();
+    setupSubscription();
+
+    // Cleanup subscription
+    return () => {
+      if (messageSubscription) {
+        messageSubscription.unsubscribe();
+      }
+    };
+  }, [user.id]);
+
+  const handleConversationPress = (conversationId, otherUserId) => {
+    router.push({
+      pathname: `/chat/${conversationId}`,
+      params: { otherUserId },
+    });
   };
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
   return (
-    <ScreenWrapper bg="white">
+    <ScreenWrapper>
       <View style={styles.container}>
         <Text style={styles.title}>Messages</Text>
 
-        {messages.length === 0 ? (
-          <Text style={styles.noMessagesText}>No messages available</Text>
+        {conversations.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No conversations yet</Text>
+            <Text style={styles.emptyStateSubtext}>
+              Start a new conversation by clicking the plus button below
+            </Text>
+          </View>
         ) : (
           <FlatList
-            data={messages}
+            data={conversations}
             keyExtractor={(item) => item.id.toString()}
             renderItem={({ item }) => (
-              <Pressable
-                style={styles.card}
-                onPress={() => handleUserPress(item.receiver_id)} // Adjust as needed
-              >
-                <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{item.receiver_name}</Text>
-                  <Text style={styles.messageText}>{item.message_text}</Text>
-                </View>
-              </Pressable>
+              <MessageCard
+                conversation={item}
+                onPress={() =>
+                  handleConversationPress(item.id, item.other_user_id)
+                }
+                currentUserId={user.id}
+              />
             )}
-            contentContainerStyle={styles.messageList}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
           />
         )}
 
-        <Pressable
+        <FloatingButton
+          icon="plus"
+          onPress={() => router.push("/users")}
           style={styles.addButton}
-          onPress={() => router.push("/UserList")} // Navigate to User List
-        >
-          <Icon name="plus" size={30} color={theme.colors.white} />
-        </Pressable>
+        />
       </View>
     </ScreenWrapper>
   );
 };
 
-export default Messages;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#ffffff",
+    padding: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
+    marginBottom: 16,
     color: theme.colors.text,
-    marginBottom: 15,
   },
-  noMessagesText: {
-    fontSize: 16,
-    color: "#666",
+  list: {
+    paddingBottom: 80,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingBottom: 80,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: theme.colors.textLight,
     textAlign: "center",
-    marginTop: 20,
-  },
-  messageList: {
-    paddingBottom: 80, // Space for the floating button
-  },
-  card: {
-    width: "100%",
-    borderBottomWidth: 1,
-    borderBottomColor: "#cccccc",
-    paddingVertical: 15,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  userInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  userName: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#333333",
-  },
-  messageText: {
-    fontSize: 14,
-    color: "#333333",
   },
   addButton: {
     position: "absolute",
-    right: 20,
-    bottom: 20,
-    backgroundColor: theme.colors.primary,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
+    right: 16,
+    bottom: 16,
   },
 });
+
+export default Messages;

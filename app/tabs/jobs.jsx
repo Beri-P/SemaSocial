@@ -1,32 +1,36 @@
 // /app/tabs/jobs.jsx
 import React, { useState, useEffect } from "react";
-import { View, FlatList, Text, Pressable, StyleSheet } from "react-native";
+import {
+  View,
+  FlatList,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+} from "react-native";
 import ScreenWrapper from "../../components/ScreenWrapper";
 import Icon from "../../assets/icons";
 import { theme } from "../../constants/theme";
 import { hp, wp } from "../../helpers/common";
 import { useRouter } from "expo-router";
-import JobCard from "../../components/JobCard"; // Assuming JobCard is modifiable
+import JobCard from "../../components/JobCard";
 import Loading from "../../components/Loading";
-import { fetchJobs } from "../../services/jobService"; // Assuming a service to fetch jobs
-
-let limit = 0;
+import { fetchJobs } from "../../services/jobService";
 
 const Jobs = () => {
-  const [activeTab, setActiveTab] = useState("Available Jobs");
+  const [activeTab, setActiveTab] = useState("Browse Job");
   const [jobs, setJobs] = useState([]);
   const [hasMore, setHasMore] = useState(true);
   const router = useRouter();
+  const limit = 10;
 
   useEffect(() => {
-    if (activeTab === "Available Jobs") {
+    if (activeTab === "Browse Job") {
       getJobs();
     }
   }, [activeTab]);
 
   const getJobs = async () => {
     if (!hasMore) return;
-    limit += 10;
     const res = await fetchJobs(limit);
     if (res.success) {
       if (jobs.length === res.data.length) setHasMore(false);
@@ -34,109 +38,49 @@ const Jobs = () => {
     }
   };
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "Available Jobs":
-        return (
-          <FlatList
-            data={jobs}
-            showsVerticalScrollIndicator={false}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <JobCard
-                job={item}
-                currentUser={{ id: 1, name: "Test User" }}
-                router={router}
-              />
-            )}
-            onEndReached={getJobs}
-            onEndReachedThreshold={0.1}
-            ListFooterComponent={
-              hasMore ? (
-                <Loading />
-              ) : (
-                <Text style={styles.noMoreJobs}>No more jobs</Text>
-              )
-            }
-          />
-        );
-      case "Job Categories":
-        return <Text style={styles.tabContent}>Pick Job Categories</Text>;
-      case "Job Companies":
-        return <Text style={styles.tabContent}>Pick Job Companies</Text>;
-      default:
-        return null;
-    }
-  };
+  const tabs = ["Browse Job", "Browse Categories", "Browse Companies"];
 
   return (
-    <ScreenWrapper bg="white">
+    <ScreenWrapper style={styles.screen}>
       <View style={styles.header}>
-        <Text style={styles.title}>Jobs</Text>
-        <Pressable onPress={() => router.push("/newJob")}>
-          <Icon
-            name="plus"
-            size={hp(3.2)}
-            strokeWidth={2}
-            color={theme.colors.text}
-          />
-        </Pressable>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Icon name="arrowLeft" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Job</Text>
+        <TouchableOpacity onPress={() => router.push("/search")}>
+          <Icon name="search" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
       <View style={styles.tabs}>
-        <Pressable
-          style={[
-            styles.tab,
-            activeTab === "Available Jobs" && styles.activeTab,
-          ]}
-          onPress={() => setActiveTab("Available Jobs")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "Available Jobs" && styles.activeTabText,
-            ]}
+        {tabs.map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            onPress={() => setActiveTab(tab)}
+            style={[styles.tab, activeTab === tab && styles.activeTab]}
           >
-            Available Jobs
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[
-            styles.tab,
-            activeTab === "Job Categories" && styles.activeTab,
-          ]}
-          onPress={() => setActiveTab("Job Categories")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "Job Categories" && styles.activeTabText,
-            ]}
-          >
-            Job Categories
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[
-            styles.tab,
-            activeTab === "Job Companies" && styles.activeTab,
-          ]}
-          onPress={() => setActiveTab("Job Companies")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "Job Companies" && styles.activeTabText,
-            ]}
-          >
-            Job Companies
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === tab && styles.activeTabText,
+              ]}
+            >
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {/* Tab Content */}
-      <View style={styles.contentContainer}>{renderTabContent()}</View>
+      <FlatList
+        data={jobs}
+        showsVerticalScrollIndicator={false}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => <JobCard job={item} router={router} />}
+        onEndReached={getJobs}
+        onEndReachedThreshold={0.1}
+        ListFooterComponent={hasMore ? <Loading /> : null}
+        contentContainerStyle={styles.listContent}
+      />
     </ScreenWrapper>
   );
 };
@@ -144,55 +88,48 @@ const Jobs = () => {
 export default Jobs;
 
 const styles = StyleSheet.create({
+  screen: {
+    backgroundColor: theme.colors.background,
+  },
   header: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
-    marginHorizontal: wp(4),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(2),
+    backgroundColor: theme.colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.grayLight,
   },
-  title: {
-    color: theme.colors.text,
-    fontSize: hp(3.2),
+  headerTitle: {
+    fontSize: hp(2.4),
     fontWeight: theme.fonts.bold,
+    color: theme.colors.text,
   },
   tabs: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 20,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.grayLight,
-    paddingBottom: 10,
-    paddingHorizontal: wp(2),
+    paddingHorizontal: wp(4),
+    marginBottom: hp(2),
+    backgroundColor: theme.colors.white,
+    paddingVertical: hp(1),
   },
   tab: {
-    paddingVertical: 10,
-    paddingHorizontal: wp(4),
+    marginRight: wp(6),
+    paddingBottom: hp(1),
   },
   activeTab: {
     borderBottomWidth: 2,
-    borderColor: theme.colors.primary,
+    borderBottomColor: theme.colors.primary,
   },
   tabText: {
-    fontSize: hp(2),
-    color: theme.colors.gray,
+    fontSize: hp(1.8),
+    color: theme.colors.textLight,
   },
   activeTabText: {
     color: theme.colors.primary,
     fontWeight: theme.fonts.bold,
   },
-  contentContainer: {
-    flex: 1,
-  },
-  noMoreJobs: {
-    textAlign: "center",
-    fontSize: hp(2),
-    color: theme.colors.textLight,
-    marginVertical: 20,
-  },
-  tabContent: {
-    fontSize: hp(2.5),
-    color: theme.colors.text,
-    textAlign: "center",
-    marginTop: 50,
+  listContent: {
+    paddingTop: hp(2),
   },
 });

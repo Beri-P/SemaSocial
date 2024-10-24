@@ -1,5 +1,5 @@
-// /app/tabs/people.jsx
-import React, { useState, useEffect } from "react";
+//tabs/people.jsx
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   View,
   FlatList,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import ScreenWrapper from "../../components/ScreenWrapper";
 import { theme } from "../../constants/theme";
@@ -17,161 +18,190 @@ import Avatar from "../../components/Avatar";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 
+const TABS = {
+  FOLLOWERS: "Followers",
+  FOLLOWING: "Following",
+  SEARCH: "Search",
+};
+
+const UserListItem = ({ user, isCurrentUser, onUnfollow }) => (
+  <View style={styles.userRow}>
+    <Avatar uri={user.image} size={40} />
+    <Text style={styles.userName}>{user.name}</Text>
+    {!isCurrentUser && (
+      <Pressable
+        onPress={() => onUnfollow(user.id)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Text style={styles.unfollowText}>Unfollow</Text>
+      </Pressable>
+    )}
+  </View>
+);
+
+const TabButton = ({ title, isActive, onPress }) => (
+  <Pressable
+    style={[styles.tab, isActive && styles.activeTab]}
+    onPress={onPress}
+  >
+    <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+      {title}
+    </Text>
+  </Pressable>
+);
+
 const People = () => {
   const router = useRouter();
   const { user: loggedInUser } = useAuth();
-  const [activeTab, setActiveTab] = useState("Followers");
-  const [followersList, setFollowersList] = useState([]);
-  const [followingList, setFollowingList] = useState([]);
-  const [followersCount, setFollowersCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
+  const [activeTab, setActiveTab] = useState(TABS.FOLLOWERS);
+  const [userData, setUserData] = useState({
+    followers: { list: [], count: 0 },
+    following: { list: [], count: 0 },
+  });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const { data: userProfile, error: userError } = await supabase
+  const fetchUserConnections = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: userProfile, error: userError } = await supabase
+        .from("profiles")
+        .select("followers, following")
+        .eq("id", loggedInUser.id)
+        .single();
+
+      if (userError) throw userError;
+
+      const connections = { followers: [], following: [] };
+
+      if (userProfile.followers?.length) {
+        const { data: followersData } = await supabase
           .from("profiles")
-          .select("followers, following")
-          .eq("id", loggedInUser.id)
-          .single();
-
-        if (userError) throw userError;
-
-        // Fetch followers
-        if (userProfile.followers && userProfile.followers.length > 0) {
-          const { data: followersData, error: followersError } = await supabase
-            .from("profiles")
-            .select("id, name, image")
-            .in("id", userProfile.followers);
-
-          if (followersError) throw followersError;
-
-          setFollowersList(followersData);
-          setFollowersCount(followersData.length);
-        }
-
-        // Fetch following
-        if (userProfile.following && userProfile.following.length > 0) {
-          const { data: followingData, error: followingError } = await supabase
-            .from("profiles")
-            .select("id, name, image")
-            .in("id", userProfile.following);
-
-          if (followingError) throw followingError;
-
-          setFollowingList(followingData);
-          setFollowingCount(followingData.length);
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        Alert.alert("Error", "There was an issue fetching the data.");
-      } finally {
-        setLoading(false);
+          .select("id, name, image")
+          .in("id", userProfile.followers);
+        connections.followers = followersData || [];
       }
-    };
 
-    fetchData();
+      if (userProfile.following?.length) {
+        const { data: followingData } = await supabase
+          .from("profiles")
+          .select("id, name, image")
+          .in("id", userProfile.following);
+        connections.following = followingData || [];
+      }
+
+      setUserData({
+        followers: {
+          list: connections.followers,
+          count: connections.followers.length,
+        },
+        following: {
+          list: connections.following,
+          count: connections.following.length,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching connections:", error);
+      Alert.alert("Error", "Failed to load user connections.");
+    } finally {
+      setLoading(false);
+    }
   }, [loggedInUser.id]);
+
+  useEffect(() => {
+    fetchUserConnections();
+  }, [fetchUserConnections]);
 
   const handleUnfollow = async (userId) => {
     try {
-      const { data: loggedInUserProfile, error: loggedInUserError } =
-        await supabase
-          .from("profiles")
-          .select("following")
-          .eq("id", loggedInUser.id)
-          .single();
-
-      const { data: profileOwner, error: ownerError } = await supabase
+      const { data: profiles, error: fetchError } = await supabase
         .from("profiles")
-        .select("followers")
-        .eq("id", userId)
-        .single();
+        .select("id, followers, following")
+        .in("id", [loggedInUser.id, userId]);
 
-      if (loggedInUserError || ownerError)
-        throw new Error("Error fetching profiles");
+      if (fetchError) throw fetchError;
 
-      // Update followers and following arrays
-      const updatedFollowers = profileOwner.followers.filter(
-        (id) => id !== loggedInUser.id
-      );
-      const updatedFollowing = loggedInUserProfile.following.filter(
-        (id) => id !== userId
-      );
+      const [loggedInUserProfile, targetUserProfile] = profiles;
 
-      const { error: updateError } = await supabase.from("profiles").upsert([
-        { id: userId, followers: updatedFollowers },
-        { id: loggedInUser.id, following: updatedFollowing },
-      ]);
+      const updates = [
+        {
+          id: userId,
+          followers: targetUserProfile.followers.filter(
+            (id) => id !== loggedInUser.id
+          ),
+        },
+        {
+          id: loggedInUser.id,
+          following: loggedInUserProfile.following.filter(
+            (id) => id !== userId
+          ),
+        },
+      ];
 
-      if (updateError) throw new Error("Error updating profiles");
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .upsert(updates);
 
-      // Update state
-      setFollowersList((prev) => prev.filter((user) => user.id !== userId));
-      setFollowingList((prev) => prev.filter((user) => user.id !== userId));
-      setFollowersCount((prev) => prev - 1);
-      setFollowingCount((prev) => prev - 1);
+      if (updateError) throw updateError;
+
+      await fetchUserConnections();
     } catch (error) {
       console.error("Error updating follow status:", error);
-      Alert.alert("Error", "There was an issue updating the follow status.");
+      Alert.alert("Error", "Failed to unfollow user.");
     }
   };
 
-  const renderUserList = (data) => {
-    return (
-      <FlatList
-        data={data}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.userRow}>
-            <Avatar uri={item.image} size={40} />
-            <Text style={styles.userName}>{item.name}</Text>
-            {item.id !== loggedInUser.id && (
-              <Pressable onPress={() => handleUnfollow(item.id)}>
-                <Text style={styles.unfollowText}>Unfollow</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
-        contentContainerStyle={styles.list}
-      />
-    );
-  };
-
-  const renderTabContent = () => {
+  const renderContent = () => {
     if (loading) {
-      return <Text style={styles.loadingText}>Loading...</Text>;
+      return (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      );
     }
 
-    switch (activeTab) {
-      case "Followers":
-        return (
-          <View>
-            <Text style={styles.tabContent}>Followers ({followersCount})</Text>
-            {renderUserList(followersList)}
-          </View>
-        );
-      case "Following":
-        return (
-          <View>
-            <Text style={styles.tabContent}>Following ({followingCount})</Text>
-            {renderUserList(followingList)}
-          </View>
-        );
-      case "Search":
-        return <Text style={styles.tabContent}>Search for People</Text>;
-      default:
-        return null;
+    const currentData =
+      activeTab === TABS.FOLLOWERS ? userData.followers : userData.following;
+
+    if (activeTab === TABS.SEARCH) {
+      return (
+        <View style={styles.centerContent}>
+          <Text style={styles.tabContent}>
+            Search functionality coming soon
+          </Text>
+        </View>
+      );
     }
+
+    return (
+      <View style={styles.contentContainer}>
+        <Text style={styles.tabContent}>
+          {activeTab} ({currentData.count})
+        </Text>
+        <FlatList
+          data={currentData.list}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => (
+            <UserListItem
+              user={item}
+              isCurrentUser={item.id === loggedInUser.id}
+              onUnfollow={handleUnfollow}
+            />
+          )}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+    );
   };
 
   return (
     <ScreenWrapper bg="white">
       <View style={styles.header}>
         <Text style={styles.title}>People</Text>
-        <Pressable onPress={() => router.push("/messages")}>
+        <Pressable
+          onPress={() => router.push("/messages")}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <Icon
             name="mail"
             size={hp(3.2)}
@@ -182,53 +212,20 @@ const People = () => {
       </View>
 
       <View style={styles.tabs}>
-        <Pressable
-          style={[styles.tab, activeTab === "Followers" && styles.activeTab]}
-          onPress={() => setActiveTab("Followers")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "Followers" && styles.activeTabText,
-            ]}
-          >
-            Followers
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === "Search" && styles.activeTab]}
-          onPress={() => setActiveTab("Search")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "Search" && styles.activeTabText,
-            ]}
-          >
-            Search
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === "Following" && styles.activeTab]}
-          onPress={() => setActiveTab("Following")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "Following" && styles.activeTabText,
-            ]}
-          >
-            Following
-          </Text>
-        </Pressable>
+        {Object.values(TABS).map((tab) => (
+          <TabButton
+            key={tab}
+            title={tab}
+            isActive={activeTab === tab}
+            onPress={() => setActiveTab(tab)}
+          />
+        ))}
       </View>
 
-      <View style={styles.contentContainer}>{renderTabContent()}</View>
+      {renderContent()}
     </ScreenWrapper>
   );
 };
-
-export default People;
 
 const styles = StyleSheet.create({
   header: {
@@ -270,7 +267,12 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    justifyContent: "flex-start",
+    paddingHorizontal: wp(4),
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   tabContent: {
     fontSize: hp(2.4),
@@ -278,14 +280,10 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginVertical: 10,
   },
-  loadingText: {
-    fontSize: hp(2),
-    color: theme.colors.gray,
-  },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10, // Reduced padding for a cleaner look
+    paddingVertical: 10,
     paddingHorizontal: 15,
     marginBottom: 10,
     backgroundColor: theme.colors.white,
@@ -305,6 +303,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   list: {
-    paddingHorizontal: wp(4), // Add horizontal padding to match the screen design
+    flexGrow: 1,
   },
 });
+
+export default People;
