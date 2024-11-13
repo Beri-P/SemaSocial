@@ -25,10 +25,89 @@ import { getSupabaseFileUrl } from "../../services/imageService";
 import Icon from "../../assets/icons";
 import { useAuth } from "../../contexts/AuthContext";
 
+// Dropdown options
+const INDUSTRY_OPTIONS = [
+  { label: "Technology", value: "technology" },
+  { label: "Healthcare", value: "healthcare" },
+  { label: "Finance", value: "finance" },
+  { label: "Education", value: "education" },
+  { label: "Manufacturing", value: "manufacturing" },
+  { label: "Retail", value: "retail" },
+  { label: "Construction", value: "construction" },
+  { label: "Hospitality", value: "hospitality" },
+];
+
+const EMPLOYMENT_TYPE_OPTIONS = [
+  { label: "Full-time", value: "full_time" },
+  { label: "Part-time", value: "part_time" },
+  { label: "Contract", value: "contract" },
+  { label: "Temporary", value: "temporary" },
+  { label: "Internship", value: "internship" },
+  { label: "Remote", value: "remote" },
+];
+
+const EDUCATION_LEVEL_OPTIONS = [
+  { label: "High School", value: "high_school" },
+  { label: "Bachelor's Degree", value: "bachelors" },
+  { label: "Master's Degree", value: "masters" },
+  { label: "PhD", value: "phd" },
+  { label: "Associate Degree", value: "associate" },
+  { label: "Certification", value: "certification" },
+  { label: "No Formal Education", value: "none" },
+];
+
+const PRIVACY_OPTIONS = [
+  { label: "All Registered Members", value: "all_members" },
+  { label: "Only Connected Members", value: "connected_members" },
+  { label: "Private", value: "private" },
+];
+
+const STATUS_OPTIONS = [
+  { label: "Active", value: "active" },
+  { label: "Draft", value: "draft" },
+  { label: "Closed", value: "closed" },
+  { label: "Expired", value: "expired" },
+];
+
+const CATEGORY_OPTIONS = [
+  { label: "Software Development", value: "software_dev" },
+  { label: "Design", value: "design" },
+  { label: "Marketing", value: "marketing" },
+  { label: "Sales", value: "sales" },
+  { label: "Customer Service", value: "customer_service" },
+  { label: "Administrative", value: "administrative" },
+  { label: "Engineering", value: "engineering" },
+  { label: "Management", value: "management" },
+];
+
+const FormField = ({ label, children }) => (
+  <View style={styles.fieldCard}>
+    <Text style={styles.inputLabel}>{label}</Text>
+    {children}
+  </View>
+);
+
+const PickerField = ({ label, value, onValueChange, items }) => (
+  <FormField label={label}>
+    <View style={styles.pickerContainer}>
+      <Picker
+        selectedValue={value}
+        onValueChange={onValueChange}
+        style={styles.picker}
+      >
+        <Picker.Item label={`Select ${label}`} value="" />
+        {items.map((item) => (
+          <Picker.Item key={item.value} label={item.label} value={item.value} />
+        ))}
+      </Picker>
+    </View>
+  </FormField>
+);
+
 const NewJob = () => {
   const { job } = useLocalSearchParams();
   const router = useRouter();
-  const { user } = useAuth(); // Get the currently authenticated user
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const [jobDetails, setJobDetails] = useState({
@@ -106,8 +185,7 @@ const NewJob = () => {
       return;
     }
 
-    const data = { ...jobDetails, file, userId: user?.id }; 
-
+    const data = { ...jobDetails, file, userId: user?.id };
     if (job && job.id) data.id = job.id;
 
     setLoading(true);
@@ -128,345 +206,243 @@ const NewJob = () => {
       <View style={styles.container}>
         <Header title={job && job.id ? "Edit Job" : "Create New Job"} />
         <ScrollView contentContainerStyle={styles.formContainer}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Company Name</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.companyName}
-              onChangeText={(text) => handleInputChange("companyName", text)}
-            />
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Company Information</Text>
+            <FormField label="Company Name">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.companyName}
+                onChangeText={(text) => handleInputChange("companyName", text)}
+                placeholder="Enter company name"
+              />
+            </FormField>
+
+            <FormField label="Company Website URL">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.companyWebsite}
+                onChangeText={(text) =>
+                  handleInputChange("companyWebsite", text)
+                }
+                placeholder="https://example.com"
+              />
+            </FormField>
+
+            <FormField label="Company Description">
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={jobDetails.companyDescription}
+                onChangeText={(text) =>
+                  handleInputChange("companyDescription", text)
+                }
+                placeholder="Describe your company"
+                multiline
+                numberOfLines={4}
+              />
+            </FormField>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Company Website URL</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.companyWebsite}
-              onChangeText={(text) => handleInputChange("companyWebsite", text)}
-            />
-          </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Job Details</Text>
+            <FormField label="Title">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.title}
+                onChangeText={(text) => handleInputChange("title", text)}
+                placeholder="Job title"
+              />
+            </FormField>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Company Description</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.companyDescription}
-              onChangeText={(text) =>
-                handleInputChange("companyDescription", text)
+            <PickerField
+              label="Industry"
+              value={jobDetails.industry}
+              onValueChange={(value) => handleInputChange("industry", value)}
+              items={INDUSTRY_OPTIONS}
+            />
+
+            <PickerField
+              label="Employment Type"
+              value={jobDetails.employmentType}
+              onValueChange={(value) =>
+                handleInputChange("employmentType", value)
               }
+              items={EMPLOYMENT_TYPE_OPTIONS}
             />
+
+            <FormField label="Skills">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.skills}
+                onChangeText={(text) => handleInputChange("skills", text)}
+                placeholder="Required skills (comma separated)"
+              />
+            </FormField>
+
+            <FormField label="Job Description">
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={jobDetails.jobDescription}
+                onChangeText={(text) =>
+                  handleInputChange("jobDescription", text)
+                }
+                placeholder="Detailed job description"
+                multiline
+                numberOfLines={6}
+              />
+            </FormField>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Title</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.title}
-              onChangeText={(text) => handleInputChange("title", text)}
-            />
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Compensation</Text>
+            <FormField label="Salary">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.salary}
+                onChangeText={(text) => handleInputChange("salary", text)}
+                placeholder="Salary range or fixed amount"
+              />
+            </FormField>
+
+            <FormField label="Other Benefits">
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={jobDetails.otherPays}
+                onChangeText={(text) => handleInputChange("otherPays", text)}
+                placeholder="Additional benefits"
+                multiline
+                numberOfLines={3}
+              />
+            </FormField>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Custom URL</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.customUrl}
-              onChangeText={(text) => handleInputChange("customUrl", text)}
-            />
-          </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Requirements</Text>
+            <FormField label="Required Experience">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.requiredExperience}
+                onChangeText={(text) =>
+                  handleInputChange("requiredExperience", text)
+                }
+                placeholder="Years of experience required"
+              />
+            </FormField>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Skills</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.skills}
-              onChangeText={(text) => handleInputChange("skills", text)}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Short Description</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.shortDescription}
-              onChangeText={(text) =>
-                handleInputChange("shortDescription", text)
+            <PickerField
+              label="Education Level"
+              value={jobDetails.educationLevel}
+              onValueChange={(value) =>
+                handleInputChange("educationLevel", value)
               }
+              items={EDUCATION_LEVEL_OPTIONS}
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Job Description</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.jobDescription}
-              onChangeText={(text) => handleInputChange("jobDescription", text)}
-            />
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Contact Information</Text>
+            <FormField label="Contact Name">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.contactName}
+                onChangeText={(text) => handleInputChange("contactName", text)}
+                placeholder="Contact person's name"
+              />
+            </FormField>
+
+            <FormField label="Email">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.email}
+                onChangeText={(text) => handleInputChange("email", text)}
+                placeholder="Contact email"
+                keyboardType="email-address"
+              />
+            </FormField>
+
+            <FormField label="Phone">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.phone}
+                onChangeText={(text) => handleInputChange("phone", text)}
+                placeholder="Contact phone number"
+                keyboardType="phone-pad"
+              />
+            </FormField>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Salary</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.salary}
-              onChangeText={(text) => handleInputChange("salary", text)}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Privacy Settings</Text>
+            <PickerField
+              label="Privacy"
+              value={jobDetails.privacy}
+              onValueChange={(value) => handleInputChange("privacy", value)}
+              items={PRIVACY_OPTIONS}
             />
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Other Pays</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.otherPays}
-              onChangeText={(text) => handleInputChange("otherPays", text)}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Required Experience</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.requiredExperience}
-              onChangeText={(text) =>
-                handleInputChange("requiredExperience", text)
+            <PickerField
+              label="Comment Privacy"
+              value={jobDetails.commentPrivacy}
+              onValueChange={(value) =>
+                handleInputChange("commentPrivacy", value)
               }
+              items={PRIVACY_OPTIONS}
+            />
+
+            <PickerField
+              label="Status"
+              value={jobDetails.status}
+              onValueChange={(value) => handleInputChange("status", value)}
+              items={STATUS_OPTIONS}
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Contact Name</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.contactName}
-              onChangeText={(text) => handleInputChange("contactName", text)}
-            />
-          </View>
+          {/* File upload section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Media</Text>
+            {file && (
+              <View style={styles.file}>
+                {getFileType() === "video" ? (
+                  <Video
+                    style={{ flex: 1 }}
+                    source={{ uri: getFileUri() }}
+                    useNativeControls
+                    resizeMode="cover"
+                    isLooping
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: getFileUri() }}
+                    resizeMode="cover"
+                    style={{ flex: 1 }}
+                  />
+                )}
+                <Pressable
+                  style={styles.closeIcon}
+                  onPress={() => setFile(null)}
+                >
+                  <Icon name="delete" size={20} color="white" />
+                </Pressable>
+              </View>
+            )}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.email}
-              onChangeText={(text) => handleInputChange("email", text)}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Phone</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.phone}
-              onChangeText={(text) => handleInputChange("phone", text)}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Facebook</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.facebook}
-              onChangeText={(text) => handleInputChange("facebook", text)}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Website</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.website}
-              onChangeText={(text) => handleInputChange("website", text)}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Job Contact Email</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.jobContactEmail}
-              onChangeText={(text) =>
-                handleInputChange("jobContactEmail", text)
-              }
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Link to Apply</Text>
-            <TextInput
-              style={styles.input}
-              value={jobDetails.linkForApply}
-              onChangeText={(text) => handleInputChange("linkForApply", text)}
-            />
-          </View>
-
-          {/* Dropdown for Industry */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Industry</Text>
-            <Picker
-              selectedValue={jobDetails.industry}
-              onValueChange={(itemValue) =>
-                handleInputChange("industry", itemValue)
-              }
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Industry" value="" />
-              <Picker.Item label="Technology" value="technology" />
-              <Picker.Item label="Healthcare" value="healthcare" />
-              {/* Add other options as needed */}
-            </Picker>
-          </View>
-
-          {/* Dropdown for Start Date */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Start Date</Text>
-            <Picker
-              selectedValue={jobDetails.startDate}
-              onValueChange={(itemValue) =>
-                handleInputChange("startDate", itemValue)
-              }
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Start Date" value="" />
-              <Picker.Item label="Technology" value="technology" />
-              <Picker.Item label="Healthcare" value="healthcare" />
-              {/* Add other options as needed */}
-            </Picker>
-          </View>
-
-          {/* Dropdown for Category */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Category</Text>
-            <Picker
-              selectedValue={jobDetails.category}
-              onValueChange={(itemValue) =>
-                handleInputChange("category", itemValue)
-              }
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Category" value="" />
-              <Picker.Item label="Technology" value="technology" />
-              <Picker.Item label="Healthcare" value="healthcare" />
-              {/* Add other options as needed */}
-            </Picker>
-          </View>
-
-          {/* Dropdown for Employment Type */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Employment Type</Text>
-            <Picker
-              selectedValue={jobDetails.employmentType}
-              onValueChange={(itemValue) =>
-                handleInputChange("employmentType", itemValue)
-              }
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Employment Type" value="" />
-              <Picker.Item label="Technology" value="technology" />
-              <Picker.Item label="Healthcare" value="healthcare" />
-              {/* Add other options as needed */}
-            </Picker>
-          </View>
-
-          {/* Dropdown for Education Level */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Education Level</Text>
-            <Picker
-              selectedValue={jobDetails.educationLevel}
-              onValueChange={(itemValue) =>
-                handleInputChange("educationLevel", itemValue)
-              }
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Education Level" value="" />
-              <Picker.Item label="Technology" value="technology" />
-              <Picker.Item label="Healthcare" value="healthcare" />
-              {/* Add other options as needed */}
-            </Picker>
-          </View>
-
-          {/* Dropdown for Privacy */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Privacy</Text>
-            <Picker
-              selectedValue={jobDetails.privacy}
-              onValueChange={(itemValue) =>
-                handleInputChange("privacy", itemValue)
-              }
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Privacy" value="" />
-              <Picker.Item label="Technology" value="technology" />
-              <Picker.Item label="Healthcare" value="healthcare" />
-              {/* Add other options as needed */}
-            </Picker>
-          </View>
-
-          {/* Dropdown for Comment Privacy */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Comment Privacy</Text>
-            <Picker
-              selectedValue={jobDetails.commentPrivacy}
-              onValueChange={(itemValue) =>
-                handleInputChange("commentPrivacy", itemValue)
-              }
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Comment Privacy" value="" />
-              <Picker.Item label="Technology" value="technology" />
-              <Picker.Item label="Healthcare" value="healthcare" />
-              {/* Add other options as needed */}
-            </Picker>
-          </View>
-
-          {/* Dropdown for Status */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Status</Text>
-            <Picker
-              selectedValue={jobDetails.status}
-              onValueChange={(itemValue) =>
-                handleInputChange("status", itemValue)
-              }
-              style={styles.picker}
-            >
-              <Picker.Item label="Select Status" value="" />
-              <Picker.Item label="Technology" value="technology" />
-              <Picker.Item label="Healthcare" value="healthcare" />
-              {/* Add other options as needed */}
-            </Picker>
-          </View>
-          {/* Add file preview for job (image or video) */}
-          {file && (
-            <View style={styles.file}>
-              {getFileType() === "video" ? (
-                <Video
-                  style={{ flex: 1 }}
-                  source={{ uri: getFileUri() }}
-                  useNativeControls
-                  resizeMode="cover"
-                  isLooping
-                />
-              ) : (
-                <Image
-                  source={{ uri: getFileUri() }}
-                  resizeMode="cover"
-                  style={{ flex: 1 }}
-                />
-              )}
-              <Pressable style={styles.closeIcon} onPress={() => setFile(null)}>
-                <Icon name="delete" size={20} color="white" />
-              </Pressable>
-            </View>
-          )}
-
-          {/* File Upload Options */}
-          <View style={styles.media}>
-            <Text style={styles.addFileText}>Add a file to the job</Text>
-            <View style={styles.mediaIcons}>
-              <TouchableOpacity onPress={() => onPickFile(true)}>
-                <Icon name="image" size={30} color={theme.colors.dark} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => onPickFile(false)}>
-                <Icon name="video" size={33} color={theme.colors.dark} />
-              </TouchableOpacity>
+            <View style={styles.media}>
+              <Text style={styles.addFileText}>Add a file to the job</Text>
+              <View style={styles.mediaIcons}>
+                <TouchableOpacity
+                  style={styles.mediaButton}
+                  onPress={() => onPickFile(true)}
+                >
+                  <Icon name="image" size={30} color={theme.colors.dark} />
+                  <Text style={styles.mediaButtonText}>Image</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.mediaButton}
+                  onPress={() => onPickFile(false)}
+                >
+                  <Icon name="video" size={33} color={theme.colors.dark} />
+                  <Text style={styles.mediaButtonText}>Video</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -487,34 +463,71 @@ export default NewJob;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginBottom: 30,
+    backgroundColor: "#f5f5f5",
     paddingHorizontal: wp(4),
-    gap: 15,
   },
   formContainer: {
-    gap: 20,
+    paddingBottom: hp(10),
   },
-  inputGroup: {
-    marginBottom: 15,
+  section: {
+    marginBottom: hp(3),
+  },
+  sectionTitle: {
+    fontSize: hp(2.2),
+    fontWeight: "bold",
+    color: theme.colors.primary,
+    marginBottom: hp(2),
+    paddingLeft: wp(2),
+  },
+  fieldCard: {
+    backgroundColor: "white",
+    borderRadius: theme.radius.lg,
+    padding: hp(2),
+    marginBottom: hp(2),
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   inputLabel: {
-    fontSize: hp(2),
+    fontSize: hp(1.8),
     color: theme.colors.textLight,
-    marginBottom: 5,
+    marginBottom: hp(1),
+    fontWeight: "500",
   },
   input: {
     borderWidth: 1,
     borderColor: theme.colors.gray,
-    padding: 10,
+    padding: hp(1.5),
     borderRadius: theme.radius.sm,
-    fontSize: hp(2),
+    fontSize: hp(1.8),
+    backgroundColor: "#fafafa",
+  },
+  textArea: {
+    height: hp(12),
+    textAlignVertical: "top",
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: theme.colors.gray,
+    borderRadius: theme.radius.sm,
+    backgroundColor: "#fafafa",
+    overflow: "hidden",
+  },
+  picker: {
+    height: hp(6),
+    width: "100%",
   },
   file: {
     height: hp(30),
     width: "100%",
     borderRadius: theme.radius.xl,
     overflow: "hidden",
-    borderCurve: "continuous",
+    marginBottom: hp(2),
   },
   closeIcon: {
     position: "absolute",
@@ -525,25 +538,47 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,0,0,0.6)",
   },
   media: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderWidth: 1.5,
-    padding: 12,
-    borderRadius: theme.radius.xl,
-    borderColor: theme.colors.gray,
+    backgroundColor: "white",
+    borderRadius: theme.radius.lg,
+    padding: hp(2),
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   mediaIcons: {
     flexDirection: "row",
-    gap: 15,
+    justifyContent: "center",
+    marginTop: hp(2),
+  },
+  mediaButton: {
+    alignItems: "center",
+    padding: hp(1.5),
+    borderWidth: 1,
+    borderColor: theme.colors.gray,
+    borderRadius: theme.radius.md,
+    width: wp(25),
+    marginHorizontal: wp(2),
+  },
+  mediaButtonText: {
+    marginTop: hp(1),
+    fontSize: hp(1.6),
+    color: theme.colors.textLight,
   },
   addFileText: {
     fontSize: hp(1.9),
     fontWeight: theme.fonts.semibold,
+    textAlign: "center",
   },
   submitButton: {
     height: hp(6.2),
     marginHorizontal: wp(4),
-    marginTop: 15,
+    marginVertical: hp(2),
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
   },
 });

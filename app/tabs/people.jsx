@@ -25,17 +25,27 @@ const TABS = {
 };
 
 const UserListItem = ({ user, isCurrentUser, onUnfollow }) => (
-  <View style={styles.userRow}>
-    <Avatar uri={user.image} size={40} />
-    <Text style={styles.userName}>{user.name}</Text>
-    {!isCurrentUser && (
-      <Pressable
-        onPress={() => onUnfollow(user.id)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Text style={styles.unfollowText}>Unfollow</Text>
-      </Pressable>
-    )}
+  <View style={styles.userCard}>
+    <View style={styles.userCardContent}>
+      <View style={styles.userInfoContainer}>
+        <Avatar uri={user.image} size={50} />
+        <View style={styles.userTextContainer}>
+          <Text style={styles.userName}>{user.name}</Text>
+          <Text style={styles.userBio} numberOfLines={2}>
+            {user.bio || "No bio available"}
+          </Text>
+        </View>
+      </View>
+      {!isCurrentUser && (
+        <Pressable
+          style={styles.unfollowButton}
+          onPress={() => onUnfollow(user.id)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={styles.unfollowText}>Unfollow</Text>
+        </Pressable>
+      )}
+    </View>
   </View>
 );
 
@@ -122,18 +132,21 @@ const People = () => {
 
       const [loggedInUserProfile, targetUserProfile] = profiles;
 
+      const updatedFollowers = (targetUserProfile.followers || []).filter(
+        (id) => id !== loggedInUser.id
+      );
+      const updatedFollowing = (loggedInUserProfile.following || []).filter(
+        (id) => id !== userId
+      );
+
       const updates = [
         {
           id: userId,
-          followers: targetUserProfile.followers.filter(
-            (id) => id !== loggedInUser.id
-          ),
+          followers: updatedFollowers,
         },
         {
           id: loggedInUser.id,
-          following: loggedInUserProfile.following.filter(
-            (id) => id !== userId
-          ),
+          following: updatedFollowing,
         },
       ];
 
@@ -245,7 +258,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     marginBottom: 20,
     borderBottomWidth: 1,
-    borderColor: theme.colors.grayLight,
+    borderColor: theme.colors.gray,
     paddingBottom: 10,
     paddingHorizontal: wp(2),
   },
@@ -280,30 +293,65 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginVertical: 10,
   },
-  userRow: {
+  userCard: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    marginVertical: 8,
+    marginHorizontal: 2,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    overflow: "hidden",
+  },
+  userCardContent: {
+    padding: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  userInfoContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    marginBottom: 10,
-    backgroundColor: theme.colors.white,
-    borderRadius: 5,
-    width: "100%",
+    flex: 1,
+    marginRight: 12,
+  },
+  userTextContainer: {
+    marginLeft: 12,
+    flex: 1,
   },
   userName: {
-    fontSize: hp(2),
-    fontWeight: "bold",
+    fontSize: hp(2.2),
+    fontWeight: theme.fonts.bold,
     color: theme.colors.text,
-    flex: 1,
-    marginLeft: 10,
+    marginBottom: 4,
+  },
+  userBio: {
+    fontSize: hp(1.8),
+    color: theme.colors.gray,
+    lineHeight: hp(2.2),
+  },
+  unfollowButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
   unfollowText: {
     color: theme.colors.primary,
-    fontSize: hp(2),
-    fontWeight: "bold",
+    fontSize: hp(1.8),
+    fontWeight: theme.fonts.bold,
   },
   list: {
     flexGrow: 1,
+    paddingHorizontal: wp(4),
+    paddingTop: 8,
+    paddingBottom: 16,
   },
 });
 

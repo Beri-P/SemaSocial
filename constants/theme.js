@@ -1,3 +1,4 @@
+//constants/theme.js
 export const theme = {
   colors: {
     primary: "#1434A4",
@@ -12,6 +13,11 @@ export const theme = {
 
     rose: "#ef4444",
     roseLight: "#f87171",
+
+    // Adding missing colors
+    white: "#FFFFFF",
+    disabled: "#C5C5C5",
+    border: "#E5E5E5", // Also used in your chat component
   },
   fonts: {
     medium: "500",

@@ -1,5 +1,5 @@
 // profile.jsx
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Alert,
   FlatList,
@@ -10,7 +10,7 @@ import {
   Pressable,
 } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter } from "expo-router";
 import ScreenWrapper from "../../components/ScreenWrapper";
 import Header from "../../components/Header";
 import { hp, wp } from "../../helpers/common";
@@ -23,10 +23,9 @@ import Loading from "../../components/Loading";
 import PostCard from "../../components/PostCard";
 import { supabase } from "../../lib/supabase";
 
-const Profile = () => {
+const Profile = ({ userId = null }) => {
   const { user: loggedInUser } = useAuth();
   const router = useRouter();
-  const { userId } = useLocalSearchParams();
   const [profileUser, setProfileUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [hasMore, setHasMore] = useState(true);
@@ -34,17 +33,30 @@ const Profile = () => {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [offset, setOffset] = useState(0);
 
+  // Reset all states when userId changes
+  const resetStates = useCallback(() => {
+    setPosts([]);
+    setOffset(0);
+    setHasMore(true);
+    setLoading(true);
+    setLoadingPosts(false);
+    setProfileUser(null);
+  }, []);
+
   // Load user data (profile)
   const loadUserData = useCallback(async () => {
-    setLoading(true);
     try {
-      let profile = loggedInUser;
-      if (userId && userId !== loggedInUser.id) {
+      let profile;
+      // If no userId is provided or if userId matches logged in user, show logged in user's profile
+      if (!userId || userId === loggedInUser.id) {
+        profile = loggedInUser;
+      } else {
         const res = await getProfileById(userId);
         if (res.success) {
           profile = res.data;
         } else {
           Alert.alert("Error", "Unable to fetch user data.");
+          return;
         }
       }
       setProfileUser(profile);
@@ -56,9 +68,20 @@ const Profile = () => {
     }
   }, [userId, loggedInUser]);
 
+  // Reset state and load new data when userId changes
+  useEffect(() => {
+    resetStates();
+    loadUserData();
+
+    // Cleanup function
+    return () => {
+      resetStates();
+    };
+  }, [userId, loggedInUser.id, resetStates, loadUserData]);
+
   // Load posts for the profile user
   const loadPosts = useCallback(async () => {
-    if (!profileUser || loadingPosts || !hasMore) return;
+    if (!profileUser?.id || loadingPosts || !hasMore) return;
 
     setLoadingPosts(true);
     try {
@@ -83,25 +106,18 @@ const Profile = () => {
     } finally {
       setLoadingPosts(false);
     }
-  }, [profileUser, hasMore, loadingPosts, offset, posts]);
+  }, [profileUser?.id, hasMore, loadingPosts, offset, posts]);
 
-  // Fetch user data when the userId changes
+  // Fetch posts when profileUser changes
   useEffect(() => {
-    if (userId) {
-      loadUserData();
-      // Reset posts when a new profile user is loaded
+    if (profileUser?.id) {
+      // Reset posts state when profile changes
       setPosts([]);
       setOffset(0);
       setHasMore(true);
-    }
-  }, [userId, loadUserData]);
-
-  // Fetch posts when profileUser or offset changes
-  useEffect(() => {
-    if (profileUser) {
       loadPosts();
     }
-  }, [profileUser, offset, loadPosts]);
+  }, [profileUser?.id]);
 
   // Handle loading more posts when scrolling to the end
   const handleEndReached = () => {
@@ -110,7 +126,6 @@ const Profile = () => {
     }
   };
 
-  // Handle logout
   const handleLogout = async () => {
     Alert.alert("Confirm", "Are you sure you want to log out?", [
       {
@@ -134,6 +149,9 @@ const Profile = () => {
     return <Loading />;
   }
 
+  // Check if we're viewing our own profile
+  const isOwnProfile = !userId || userId === loggedInUser.id;
+
   return (
     <ScreenWrapper bg="white">
       <FlatList
@@ -143,7 +161,7 @@ const Profile = () => {
             profileUser={profileUser}
             setProfileUser={setProfileUser}
             loggedInUser={loggedInUser}
-            userId={userId}
+            isOwnProfile={isOwnProfile}
             router={router}
             handleLogout={handleLogout}
           />
@@ -160,15 +178,22 @@ const Profile = () => {
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListFooterComponent={
-          hasMore ? (
+          loadingPosts ? (
             <View style={{ marginVertical: posts.length === 0 ? 100 : 30 }}>
               <Loading />
             </View>
-          ) : (
+          ) : !hasMore && posts.length > 0 ? (
             <View style={{ marginVertical: 30 }}>
               <Text style={styles.noPosts}>No more posts</Text>
             </View>
-          )
+          ) : null
+        }
+        ListEmptyComponent={
+          !loadingPosts ? (
+            <View style={{ marginVertical: 100 }}>
+              <Text style={styles.noPosts}>No posts yet</Text>
+            </View>
+          ) : null
         }
       />
     </ScreenWrapper>
@@ -179,26 +204,81 @@ const UserHeader = ({
   profileUser,
   setProfileUser,
   loggedInUser,
-  userId,
+  isOwnProfile,
   router,
   handleLogout,
 }) => {
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
   const [followersList, setFollowersList] = useState([]);
   const [followingList, setFollowingList] = useState([]);
 
   const isFollowing = profileUser?.followers?.includes(loggedInUser.id);
 
   useEffect(() => {
-    if (userId) {
+    const fetchFollowCounts = async () => {
+      if (!profileUser?.id) return;
+
+      try {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("followers, following")
+          .eq("id", profileUser.id)
+          .single();
+
+        if (error) throw error;
+
+        // Ensure followers and following are arrays, defaulting to empty arrays if null
+        const followers = Array.isArray(profile.followers)
+          ? profile.followers
+          : [];
+        const following = Array.isArray(profile.following)
+          ? profile.following
+          : [];
+
+        setFollowerCount(followers.length);
+        setFollowingCount(following.length);
+
+        // Update the profileUser state with the correct arrays
+        setProfileUser((prev) => ({
+          ...prev,
+          followers: followers,
+          following: following,
+        }));
+
+        // Fetch detailed followers information
+        const { data: followersData } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", followers);
+
+        // Fetch detailed following information
+        const { data: followingData } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", following);
+
+        setFollowersList(followersData || []);
+        setFollowingList(followingData || []);
+      } catch (error) {
+        console.error("Error fetching follow counts:", error);
+      }
+    };
+
+    fetchFollowCounts();
+  }, [profileUser?.id]);
+
+  useEffect(() => {
+    if (profileUser?.id) {
       const channel = supabase
-        .channel("any")
+        .channel(`profile-${profileUser.id}`)
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
             table: "profiles",
-            filter: `id=eq.${userId}`,
+            filter: `id=eq.${profileUser.id}`,
           },
           (payload) => {
             if (payload.new) {
@@ -216,123 +296,124 @@ const UserHeader = ({
         channel.unsubscribe();
       };
     }
-  }, [userId]);
+  }, [profileUser?.id, setProfileUser]);
 
   useEffect(() => {
-    const fetchFollowersAndFollowing = async () => {
-      try {
-        const { data: profileOwner, error } = await supabase
-          .from("profiles")
-          .select("followers, following")
-          .eq("id", profileUser.id)
-          .single();
+    if (profileUser?.id) {
+      const channel = supabase
+        .channel(`profile-${profileUser.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${profileUser.id}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              const newFollowers = Array.isArray(payload.new.followers)
+                ? payload.new.followers
+                : [];
+              const newFollowing = Array.isArray(payload.new.following)
+                ? payload.new.following
+                : [];
 
-        if (error) throw error;
+              setFollowerCount(newFollowers.length);
+              setFollowingCount(newFollowing.length);
 
-        const { data: followers, error: followersError } = await supabase
-          .from("profiles")
-          .select("*")
-          .in("id", profileOwner.followers);
+              setProfileUser((prev) => ({
+                ...prev,
+                followers: newFollowers,
+                following: newFollowing,
+              }));
+            }
+          }
+        )
+        .subscribe();
 
-        const { data: following, error: followingError } = await supabase
-          .from("profiles")
-          .select("*")
-          .in("id", profileOwner.following);
-
-        if (followersError || followingError)
-          throw new Error("Error fetching users");
-
-        setFollowersList(followers);
-        setFollowingList(following);
-      } catch (error) {
-        console.error("Error fetching followers and following:", error);
-      }
-    };
-
-    fetchFollowersAndFollowing();
-  }, [profileUser.id]);
-
-  useEffect(() => {
-    const fetchCounts = async () => {
-      try {
-        const { data: profileOwner, error } = await supabase
-          .from("profiles")
-          .select("followers, following")
-          .eq("id", profileUser.id)
-          .single();
-
-        if (error) throw error;
-
-        setProfileUser((prevProfileUser) => ({
-          ...prevProfileUser,
-          followers: profileOwner.followers,
-          following: profileOwner.following,
-        }));
-      } catch (error) {
-        console.error("Error fetching follower/following counts:", error);
-      }
-    };
-
-    if (profileUser && profileUser.id) {
-      fetchCounts();
+      return () => {
+        channel.unsubscribe();
+      };
     }
-  }, [profileUser, setProfileUser]);
+  }, [profileUser?.id]);
 
   const handleFollowToggle = async () => {
     try {
       const profileOwnerId = profileUser.id;
       const loggedInUserId = loggedInUser.id;
-
-      const { data: profileOwner, error: ownerError } = await supabase
+  
+      // First fetch both profiles
+      const { data: ownerProfile, error: ownerError } = await supabase
         .from("profiles")
         .select("followers")
         .eq("id", profileOwnerId)
         .single();
-
-      const { data: loggedInUserProfile, error: loggedInUserError } =
-        await supabase
-          .from("profiles")
-          .select("following")
-          .eq("id", loggedInUserId)
-          .single();
-
-      if (ownerError || loggedInUserError)
-        throw new Error("Error fetching profiles");
-
-      const isCurrentlyFollowing =
-        profileOwner.followers.includes(loggedInUserId);
-
+  
+      if (ownerError) throw new Error(`Error fetching profile owner: ${ownerError.message}`);
+  
+      const { data: loggedInUserProfile, error: loggedInError } = await supabase
+        .from("profiles")
+        .select("following")
+        .eq("id", loggedInUserId)
+        .single();
+  
+      if (loggedInError) throw new Error(`Error fetching logged in user: ${loggedInError.message}`);
+  
+      // Safely handle null values from database
+      const currentFollowers = ownerProfile?.followers || [];
+      const currentFollowing = loggedInUserProfile?.following || [];
+  
+      // Check if currently following
+      const isCurrentlyFollowing = currentFollowers.includes(loggedInUserId);
+  
+      // Prepare updates
       let updatedFollowers, updatedFollowing;
-
+  
       if (isCurrentlyFollowing) {
-        updatedFollowers = profileOwner.followers.filter(
-          (id) => id !== loggedInUserId
-        );
-        updatedFollowing = loggedInUserProfile.following.filter(
-          (id) => id !== profileOwnerId
-        );
+        // Remove from followers/following
+        updatedFollowers = currentFollowers.filter(id => id !== loggedInUserId);
+        updatedFollowing = currentFollowing.filter(id => id !== profileOwnerId);
       } else {
-        updatedFollowers = [...(profileOwner.followers || []), loggedInUserId];
-        updatedFollowing = [
-          ...(loggedInUserProfile.following || []),
-          profileOwnerId,
-        ];
+        // Add to followers/following
+        updatedFollowers = [...new Set([...currentFollowers, loggedInUserId])];
+        updatedFollowing = [...new Set([...currentFollowing, profileOwnerId])];
       }
-
-      const { error: updateError } = await supabase.from("profiles").upsert([
-        { id: profileOwnerId, followers: updatedFollowers },
-        { id: loggedInUserId, following: updatedFollowing },
-      ]);
-
-      if (updateError) throw new Error("Error updating profiles");
-
-      setProfileUser((prevProfileUser) => ({
-        ...prevProfileUser,
+  
+      // Update profiles separately
+      const { error: updateOwnerError } = await supabase
+        .from("profiles")
+        .update({
+          followers: updatedFollowers,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", profileOwnerId);
+  
+      if (updateOwnerError) throw new Error(`Error updating profile owner: ${updateOwnerError.message}`);
+  
+      const { error: updateLoggedInError } = await supabase
+        .from("profiles")
+        .update({
+          following: updatedFollowing,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", loggedInUserId);
+  
+      if (updateLoggedInError) throw new Error(`Error updating logged in user: ${updateLoggedInError.message}`);
+  
+      // Update local state
+      setFollowerCount(updatedFollowers.length);
+      setProfileUser(prev => ({
+        ...prev,
         followers: updatedFollowers,
       }));
+  
     } catch (error) {
       console.error("Error updating follow status:", error);
-      Alert.alert("Error", "There was an issue updating the follow status.");
+      Alert.alert(
+        "Error",
+        "There was an issue updating the follow status. Please try again."
+      );
     }
   };
 
@@ -345,83 +426,71 @@ const UserHeader = ({
       style={{ flex: 1, backgroundColor: "white", paddingHorizontal: wp(4) }}
     >
       <View>
-        <Header title="Profile" mb={30} />
-        {profileUser.id === loggedInUser.id ? (
+        <Header title={isOwnProfile ? "My Profile" : "Profile"} mb={30} />
+        {isOwnProfile && (
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Icon name="logout" color={theme.colors.rose} />
           </TouchableOpacity>
-        ) : null}
+        )}
       </View>
 
       <View style={styles.container}>
         <View style={{ gap: 15 }}>
-          <View className={styles.avatarContainer}>
+          <View style={styles.avatarContainer}>
             <Avatar
               uri={profileUser?.image}
               size={hp(12)}
               rounded={theme.radius.xxl * 1.4}
             />
-            {profileUser.id === loggedInUser.id ? (
+            {isOwnProfile && (
               <Pressable
                 style={styles.editIcon}
                 onPress={() => router.push("editProfile")}
               >
                 <Icon name="edit" strokeWidth={2.5} color={theme.colors.rose} />
               </Pressable>
-            ) : null}
+            )}
           </View>
 
           <View style={{ alignItems: "center", gap: 4 }}>
-            <Text style={styles.username}>
-              {profileUser && profileUser.name}
-            </Text>
-            <Text style={styles.infoText}>
-              {profileUser && profileUser.address}
-            </Text>
+            <Text style={styles.userName}>{profileUser?.name}</Text>
+            <Text style={styles.infoText}>{profileUser?.address}</Text>
           </View>
 
           <View style={{ gap: 10 }}>
             <View style={styles.info}>
               <Icon name="mail" size={20} color={theme.colors.textLight} />
-              <Text style={styles.infoText}>
-                {profileUser && profileUser.email}
-              </Text>
+              <Text style={styles.infoText}>{profileUser?.email}</Text>
             </View>
-            {profileUser.phoneNumber && (
+            {profileUser?.phoneNumber && (
               <View style={styles.info}>
                 <Icon name="call" size={20} color={theme.colors.textLight} />
                 <Text style={styles.infoText}>{profileUser.phoneNumber}</Text>
               </View>
             )}
-            {profileUser.bio && (
+            {profileUser?.bio && (
               <Text style={styles.infoText}>{profileUser.bio}</Text>
             )}
           </View>
 
           <View style={styles.statsContainer}>
             <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {profileUser?.followers?.length || 0}
-              </Text>
+              <Text style={styles.statValue}>{followerCount}</Text>
               <Text style={styles.statLabel}>Followers</Text>
             </View>
             <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {profileUser?.following?.length || 0}
-              </Text>
+              <Text style={styles.statValue}>{followingCount}</Text>
               <Text style={styles.statLabel}>Following</Text>
             </View>
           </View>
 
-          {profileUser.id !== loggedInUser.id ? (
+          {!isOwnProfile && (
             <View style={styles.buttonContainer}>
               <TouchableOpacity
                 style={[
                   styles.followButton,
                   {
-                    backgroundColor: isFollowing
-                      ? theme.colors.primary
-                      : theme.colors.primary,
+                    backgroundColor: theme.colors.primary,
                   },
                 ]}
                 onPress={handleFollowToggle}
@@ -438,7 +507,7 @@ const UserHeader = ({
                 <Text style={styles.messageButtonText}>Message</Text>
               </TouchableOpacity>
             </View>
-          ) : null}
+          )}
         </View>
       </View>
     </View>

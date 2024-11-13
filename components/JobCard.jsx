@@ -9,7 +9,11 @@ import moment from "moment";
 const JobCard = ({ job = {}, router }) => {
   const openJobDetails = () => {
     if (job?.id) {
-      router.push({ pathname: "jobDetails", params: { jobId: job.id } });
+      // Navigate to JobDetails with jobId as a parameter
+      router.push({
+        pathname: "/jobDetails",
+        params: { jobId: job.id },
+      });
     }
   };
 
@@ -18,31 +22,35 @@ const JobCard = ({ job = {}, router }) => {
   return (
     <TouchableOpacity onPress={openJobDetails} style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.jobTitle}>{job?.title || "No Title"}</Text>
+        {/* Job Title */}
+        <Text style={styles.jobTitle}>{job.title || "No Title"}</Text>
 
+        {/* Company Information */}
         <View style={styles.companyInfo}>
-          <Icon name="building" size={16} color={theme.colors.textLight} />
+          <Icon name="company" size={16} color={theme.colors.textLight} />
           <Text style={styles.companyText}>
-            {job?.company || "Unknown Company"}
+            {job.companyName || "No Company Provided"}
           </Text>
         </View>
 
+        {/* Experience and Location Information */}
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
-            <Icon name="clock" size={16} color={theme.colors.textLight} />
+            <Icon name="experience" size={16} color={theme.colors.textLight} />
             <Text style={styles.infoText}>
-              {job?.experience || "Not specified"}
+              {job.requiredExperience || "Experience not specified"}
             </Text>
           </View>
 
           <View style={styles.infoItem}>
-            <Icon name="mapPin" size={16} color={theme.colors.textLight} />
+            <Icon name="location" size={16} color={theme.colors.textLight} />
             <Text style={styles.infoText}>
-              {job?.location || "Location not specified"}
+              {job.location || "Location not specified"}
             </Text>
           </View>
         </View>
 
+        {/* Posted Time */}
         <Text style={styles.postedTime}>Posted {timeAgo}</Text>
       </View>
     </TouchableOpacity>

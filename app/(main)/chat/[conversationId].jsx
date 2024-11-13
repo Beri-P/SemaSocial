@@ -1,4 +1,4 @@
-//app/chat.jsx
+//app/(main)/chat/[conversationId].jsx
 import React, { useEffect, useState, useRef } from "react";
 import {
   View,
@@ -9,23 +9,75 @@ import {
   Platform,
   ActivityIndicator,
   Pressable,
+  Text,
+  Image,
+  TouchableOpacity,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useAuth } from "../contexts/AuthContext";
-import { theme } from "../constants/theme";
-import ScreenWrapper from "../components/ScreenWrapper";
+import { useAuth } from "../../../contexts/AuthContext";
+import { theme } from "../../../constants/theme";
 import {
   fetchMessages,
   sendMessage,
-  markConversationAsRead,
+  markMessagesAsRead,
   subscribeToMessages,
-} from "../services/messageService";
-import MessageBubble from "../components/MessageBubble";
-import IconButton from "../components/IconButton";
-import { Camera, Image as ImageIcon, Send } from "lucide-react";
+  fetchUserDetails,
+} from "../../../services/messageService";
+import MessageBubble from "../../../components/MessageBubble";
+import IconButton from "../../../components/IconButton";
+import {
+  Camera,
+  Image as ImageIcon,
+  Send,
+  ChevronLeft,
+} from "lucide-react-native";
+import Avatar from "../../../components/Avatar";
 import * as ImagePicker from "expo-image-picker";
+import ScreenWrapper from "../../../components/ScreenWrapper";
 
-const Chat = () => {
+// Chat header to show other user's information
+const ChatHeader = ({ otherUser, onBack }) => {
+  const [imageError, setImageError] = useState(false);
+
+  const renderProfileImage = () => {
+    if (!otherUser?.image || imageError) {
+      // Return a default avatar or placeholder
+      return (
+        <View style={[styles.avatar, styles.avatarPlaceholder]}>
+          <Text style={styles.fallbackText}>
+            {otherUser?.name?.[0]?.toUpperCase()}
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <Avatar
+        uri={otherUser?.image} // Pass the image URI to Avatar component
+        size={40} // You can customize the size as needed
+        fallback={otherUser?.name?.[0]?.toUpperCase()} // Use the first letter of the name as fallback
+        style={styles.avatar}
+      />
+    );
+  };
+
+  return (
+    <View style={styles.header}>
+      <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <ChevronLeft size={24} color={theme.colors.text} />
+      </TouchableOpacity>
+      <View style={styles.userInfo}>
+        {renderProfileImage()}
+        <View style={styles.userTextInfo}>
+          <Text style={styles.username}>{otherUser?.name || "User"}</Text>
+          {otherUser?.bio && <Text style={styles.status}>{otherUser.bio}</Text>}
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const ChatScreen = () => {
   const { conversationId, otherUserId } = useLocalSearchParams();
   const { user } = useAuth();
   const router = useRouter();
@@ -34,9 +86,16 @@ const Chat = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [attachments, setAttachments] = useState([]);
+  const [otherUser, setOtherUser] = useState(null);
   const flatListRef = useRef(null);
 
   useEffect(() => {
+    console.log(
+      "ChatScreen loaded with conversation ID:",
+      conversationId,
+      "and otherUserId:",
+      otherUserId
+    );
     let messageSubscription;
 
     const loadMessages = async () => {
@@ -44,8 +103,8 @@ const Chat = () => {
         setLoading(true);
         const result = await fetchMessages(conversationId);
         if (result.success) {
-          setMessages(result.data);
-          await markConversationAsRead(conversationId, user.id);
+          setMessages(result.data.reverse());
+          await markMessagesAsRead(conversationId, user.id);
         }
       } catch (error) {
         console.error("Error loading messages:", error);
@@ -54,17 +113,29 @@ const Chat = () => {
       }
     };
 
+    const loadOtherUser = async () => {
+      try {
+        const userResult = await fetchUserDetails(otherUserId);
+        if (userResult.success) {
+          setOtherUser(userResult.data);
+        }
+      } catch (error) {
+        console.error("Error loading user details:", error);
+      }
+    };
+
     const setupSubscription = () => {
       messageSubscription = subscribeToMessages(user.id, (payload) => {
         if (payload.new && payload.new.conversation_id === conversationId) {
-          setMessages((prev) => [...prev, payload.new]);
-          markConversationAsRead(conversationId, user.id);
+          setMessages((prev) => [payload.new, ...prev]);
+          markMessagesAsRead(conversationId, user.id);
           scrollToBottom();
         }
       });
     };
 
     loadMessages();
+    loadOtherUser();
     setupSubscription();
 
     return () => {
@@ -72,7 +143,7 @@ const Chat = () => {
         messageSubscription.unsubscribe();
       }
     };
-  }, [conversationId, user.id]);
+  }, [conversationId, user.id, otherUserId]);
 
   const scrollToBottom = () => {
     if (flatListRef.current && messages.length > 0) {
@@ -93,6 +164,7 @@ const Chat = () => {
       });
 
       if (result.success) {
+        setMessages((prevMessages) => [result.data, ...prevMessages]);
         setInputText("");
         setAttachments([]);
         scrollToBottom();
@@ -129,7 +201,7 @@ const Chat = () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        alert("Sorry, we need camera permissions to make this work!");
+        alert("Camera permission is required to take photos.");
         return;
       }
 
@@ -190,6 +262,10 @@ const Chat = () => {
     );
   };
 
+  const handleBack = () => {
+    router.back();
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -200,21 +276,24 @@ const Chat = () => {
 
   return (
     <ScreenWrapper>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : null}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={scrollToBottom}
-          onLayout={scrollToBottom}
-          inverted={false}
-        />
+      <View style={styles.container}>
+        <ChatHeader otherUser={otherUser} onBack={handleBack} />
+        <KeyboardAvoidingView
+          style={styles.keyboardView}
+          behavior={Platform.OS === "ios" ? "padding" : null}
+          keyboardVerticalOffset={90} // Adjust this value as needed
+        >
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={styles.messagesList}
+            onContentSizeChange={scrollToBottom}
+            onLayout={scrollToBottom}
+            inverted={true}
+          />
+        </KeyboardAvoidingView>
 
         {renderAttachmentPreview()}
 
@@ -254,14 +333,52 @@ const Chat = () => {
             />
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </ScreenWrapper>
   );
 };
+export default ChatScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.gray,
+    backgroundColor: theme.colors.white,
+  },
+  backButton: {
+    marginRight: 12,
+  },
+  userInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  userTextInfo: {
+    flex: 1,
+  },
+  username: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  status: {
+    fontSize: 12,
+    color: theme.colors.textLight,
   },
   loadingContainer: {
     flex: 1,
@@ -274,7 +391,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.gray,
     padding: 8,
     backgroundColor: theme.colors.white,
   },
@@ -286,7 +403,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.gray,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -327,5 +444,3 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
 });
-
-export default Chat;

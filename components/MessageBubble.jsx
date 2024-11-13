@@ -1,3 +1,4 @@
+//MessageBubble.jsx
 import React from "react";
 import { View, Text, StyleSheet, Image, Pressable } from "react-native";
 import { theme } from "../constants/theme";
@@ -5,6 +6,11 @@ import { formatDistanceToNow } from "date-fns";
 
 const MessageBubble = ({ message, isOwn }) => {
   const { message_text, created_at, attachments, users: sender } = message;
+
+  // Format date if it's valid, otherwise show a fallback text
+  const formattedDate = created_at
+    ? formatDistanceToNow(new Date(created_at), { addSuffix: true })
+    : "Date not available";
 
   const renderAttachments = () => {
     if (!attachments || attachments.length === 0) return null;
@@ -68,7 +74,7 @@ const MessageBubble = ({ message, isOwn }) => {
             isOwn ? styles.ownTimestamp : styles.otherTimestamp,
           ]}
         >
-          {formatDistanceToNow(new Date(created_at), { addSuffix: true })}
+          {formattedDate}
         </Text>
       </View>
     </View>

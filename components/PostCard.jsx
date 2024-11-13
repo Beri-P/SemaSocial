@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { theme } from "../constants/theme";
 import { hp, stripHtmlTags, wp } from "../helpers/common";
 import Avatar from "./Avatar";
@@ -19,11 +19,13 @@ import { downloadFile, getSupabaseFileUrl } from "../services/imageService";
 import { Video } from "expo-av";
 import { createPostLike, removePostLike } from "../services/postService";
 import Loading from "./Loading";
+import { useVideo } from "../contexts/VideoContext";
 
 const textStyle = {
   color: theme.colors.dark,
   fontSize: hp(1.75),
 };
+
 const tagsStyles = {
   div: textStyle,
   p: textStyle,
@@ -35,8 +37,9 @@ const tagsStyles = {
     color: theme.colors.dark,
   },
 };
+
 const PostCard = ({
-  item = {}, // Provide a default empty object
+  item = {}, // Default empty object for item prop
   currentUser,
   router,
   hasShadow = true,
@@ -55,18 +58,80 @@ const PostCard = ({
     elevation: 1,
   };
 
+  const videoRef = useRef(null);
+  const { activeVideoId, isVideoPaused, playVideo } = useVideo(); // Access video context
+  const isActiveVideo = activeVideoId === item.id;
+
   const [likes, setLikes] = useState(item?.postLikes || []);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isActiveVideo && !isVideoPaused) {
+        videoRef.current.playAsync();
+      } else {
+        videoRef.current.pauseAsync();
+      }
+    }
+  }, [isActiveVideo, isVideoPaused]);
+
+  const handleVideoPress = () => {
+    if (isActiveVideo) {
+      playVideo(null); // Pause if it's already active
+    } else {
+      playVideo(item.id); // Set this video as active
+    }
+  };
+
+  const renderMedia = () => {
+    if (item.file?.type?.includes("video")) {
+      return (
+        <Video
+          ref={videoRef}
+          source={{ uri: item.file.url }}
+          style={styles.postMedia}
+          resizeMode="cover"
+          isLooping
+          shouldPlay={false}
+          onTouchStart={handleVideoPress} // Control playback on touch
+          useNativeControls={false}
+        />
+      );
+    }
+
+    /*if (item.file?.includes("postImages")) {
+      return (
+        <Image
+          source={getSupabaseFileUrl(item.file)}
+          transition={100}
+          style={styles.postMedia}
+          contentFit="cover"
+        />
+      );
+    }*/
+
+    // Return other media types if needed
+    return null;
+  };
 
   useEffect(() => {
     setLikes(item?.postLikes || []);
   }, [item?.postLikes]);
 
-  // Ensure safe access to item properties
+  const handleUserPress = () => {
+    if (item.user?.id === currentUser?.id) {
+      router.push("/tabs/profile");
+    } else {
+      router.push({
+        pathname: "/userProfile",
+        params: { userId: item.user.id },
+      });
+    }
+  };
+
   const openPostDetails = () => {
-    //later
-    if (!showMoreIcon) return null;
-    if (item?.id) {
+    if (!showMoreIcon) return;
+    if (item.id) {
       router.push({ pathname: "postDetails", params: { postId: item.id } });
     } else {
       console.warn("Post ID is missing");
@@ -75,24 +140,19 @@ const PostCard = ({
 
   const onLike = async () => {
     if (liked) {
-      //remove like
       let updatedLikes = likes.filter((like) => like.userId != currentUser?.id);
-
       setLikes([...updatedLikes]);
       let res = await removePostLike(item?.id, currentUser?.id);
-      console.log("removed like: ", res);
       if (!res.success) {
         Alert.alert("Post", "Something went wrong!");
       }
     } else {
-      //create like
       let data = {
         userId: currentUser?.id,
         postId: item?.id,
       };
       setLikes([...likes, data]);
       let res = await createPostLike(data);
-      console.log("added like: ", res);
       if (!res.success) {
         Alert.alert("Post", "Something went wrong!");
       }
@@ -103,7 +163,6 @@ const PostCard = ({
     try {
       let content = { message: stripHtmlTags(item?.body || "") };
       if (item?.file) {
-        //download the file then share the local uri
         setLoading(true);
         let url = await downloadFile(getSupabaseFileUrl(item.file).uri);
         setLoading(false);
@@ -114,6 +173,7 @@ const PostCard = ({
       console.error("Error sharing post:", error);
     }
   };
+
   const handlePostDelete = () => {
     Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
       {
@@ -131,25 +191,21 @@ const PostCard = ({
 
   const createdAt = moment(item?.created_at).format("MMM D");
   const liked = likes.some((like) => like.userId === currentUser?.id);
+
   return (
     <View style={[styles.container, hasShadow && shadowStyles]}>
       <View style={styles.header}>
-        {/* User info and Post time */}
         <View style={styles.userInfo}>
-          <TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleUserPress}
+            style={styles.userInfoContent}
+          >
             <Avatar
               size={hp(4.5)}
               uri={item?.user?.image}
               rounded={theme.radius.md}
             />
-            <View style={{ gap: 2 }}>
-              onPress=
-              {() =>
-                router.push({
-                  pathname: "tabs/profile",
-                  params: { userId: item?.user?.id },
-                })
-              }
+            <View style={styles.userTextContainer}>
               <Text style={styles.username}>
                 {item?.user?.name || "Unknown User"}
               </Text>
@@ -181,8 +237,6 @@ const PostCard = ({
         )}
       </View>
 
-      {/* Post body & Media */}
-
       <View style={styles.content}>
         <View style={styles.postBody}>
           {item?.body ? (
@@ -192,9 +246,9 @@ const PostCard = ({
               tagsStyles={tagsStyles}
             />
           ) : null}
+          {renderMedia()}
         </View>
 
-        {/* PostImage */}
         {item?.file && item?.file?.includes("postImages") && (
           <Image
             source={getSupabaseFileUrl(item?.file)}
@@ -204,7 +258,6 @@ const PostCard = ({
           />
         )}
 
-        {/* PostVideo */}
         {item?.file && item?.file?.includes("postVideos") && (
           <Video
             style={[styles.postMedia, { height: hp(30) }]}
@@ -216,7 +269,6 @@ const PostCard = ({
         )}
       </View>
 
-      {/* Like, Comment, Share */}
       <View style={styles.footer}>
         <View style={styles.footerButton}>
           <TouchableOpacity onPress={onLike}>
@@ -249,7 +301,7 @@ const PostCard = ({
   );
 };
 
-export default PostCard;
+export default React.memo(PostCard);
 
 const styles = StyleSheet.create({
   container: {
@@ -273,6 +325,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  userInfoContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  userTextContainer: {
+    gap: 2,
+  },
   username: {
     fontSize: hp("1.7"),
     color: theme.colors.textLight,
@@ -285,7 +345,6 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: 10,
-    //marginBottom: 10,
   },
   postMedia: {
     height: hp(40),

@@ -1,3 +1,4 @@
+//icons/index.jsx
 import React from "react";
 import Home from "./Home";
 import Mail from "./Mail";
@@ -24,6 +25,18 @@ import Video from "./Video";
 import Users from "./Users";
 import Job from "./Job";
 import Notification from "./Notification";
+import Accounting from "./Accounting";
+import Administration from "./Administration";
+import Agriculture from "./Agriculture";
+import Architectural from "./Architectural";
+import Audit from "./Audit";
+import Automotive from "./Automotive";
+import Engineering from "./Engineering";
+import Hospitality from "./Hospitality";
+import Media from "./Media";
+import Programming from "./Programming";
+import Company from "./Company";
+import Experience from "./Experience";
 
 const icons = {
   home: Home,
@@ -50,6 +63,18 @@ const icons = {
   users: Users,
   job: Job,
   notification: Notification,
+  accounting: Accounting,
+  administration: Administration,
+  agriculture: Agriculture,
+  architectural: Architectural,
+  audit: Audit,
+  automotive: Automotive,
+  engineering: Engineering,
+  hospitality: Hospitality,
+  media: Media,
+  programming: Programming,
+  company: Company,
+  experience: Experience,
 };
 
 const Icon = ({ name, ...props }) => {

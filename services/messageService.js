@@ -5,12 +5,30 @@ import { uploadFile } from "./storageService";
 export const fetchConversations = async (userId) => {
   try {
     const { data, error } = await supabase.rpc("get_user_conversations", {
-      user_id: userId,
+      p_user_id: userId,
     });
 
     if (error) throw error;
 
-    return { success: true, data };
+    // Transform the data to match the expected format
+    const transformedData = data.map((conversation) => {
+      console.log("Conversation data:", conversation);
+      return {
+        id: conversation.conversation_id,
+        other_user_id: conversation.other_user_id,
+        other_user: {
+          id: conversation.other_user_id,
+          name: conversation.other_user_name,
+          avatar_url: conversation.other_user_avatar,
+        },
+        last_message: conversation.last_message,
+        updated_at: conversation.updated_at,
+        unread_count: conversation.unread_count || 0,
+        last_sender_id: conversation.last_sender_id,
+      };
+    });
+
+    return { success: true, data: transformedData };
   } catch (error) {
     console.error("Error fetching conversations:", error);
     return { success: false, error };
@@ -18,6 +36,11 @@ export const fetchConversations = async (userId) => {
 };
 
 export const fetchMessages = async (conversationId, limit = 50) => {
+  if (!conversationId) {
+    console.error("Error: conversationId is undefined");
+    return { success: false, error: "Conversation ID is required" };
+  }
+
   try {
     const { data, error } = await supabase
       .from("messages")
@@ -29,9 +52,9 @@ export const fetchMessages = async (conversationId, limit = 50) => {
         sender_id,
         conversation_id,
         attachments (*),
-        sender:profiles!sender_id (
+        profiles (
           id,
-          full_name,
+          name,
           avatar_url
         )
       `
@@ -56,7 +79,7 @@ export const sendMessage = async ({
   attachments = [],
 }) => {
   try {
-    // Insert message into the messages table
+    // Insert the message
     const { data: message, error: messageError } = await supabase
       .from("messages")
       .insert({
@@ -72,12 +95,9 @@ export const sendMessage = async ({
     // Handle attachments (if any)
     if (attachments.length > 0) {
       const attachmentPromises = attachments.map(async (attachment) => {
-        // Generate a unique file name for the storage path
         const fileName = `${senderId}/${conversationId}/${
           message.id
         }/${Date.now()}-${attachment.name}`;
-
-        // Upload the file using the uploadFile function
         const { url, error: uploadError } = await uploadFile(
           `messages/${fileName}`,
           attachment
@@ -85,28 +105,26 @@ export const sendMessage = async ({
 
         if (uploadError) throw uploadError;
 
-        // Create an attachment record in the attachments table
         return supabase.from("attachments").insert({
-          message_id: message.id, // Link the attachment to the message
-          file_type: attachment.type, // Use the attachment's file type (e.g., image, file, etc.)
-          file_url: url, // Store the uploaded file's URL
-          file_name: attachment.name, // Store the original file name
-          file_size: attachment.size, // Store the file size
+          message_id: message.id,
+          file_type: attachment.type,
+          file_url: url,
+          file_name: attachment.name,
+          file_size: attachment.size,
         });
       });
 
-      // Wait for all attachment upload and record creation promises to resolve
       await Promise.all(attachmentPromises);
     }
 
-    // Update conversation's last_message and updated_at fields
+    // Update both participants' conversation records
     await supabase
       .from("conversations")
       .update({
         last_message: text,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", conversationId);
+      .or(`id.eq.${conversationId}`);
 
     return { success: true, data: message };
   } catch (error) {
@@ -123,7 +141,7 @@ export const markMessagesAsRead = async (conversationId) => {
 
     const { error } = await supabase
       .from("messages")
-      .update({ is_read: true })
+      .update({ isread: true })
       .eq("conversation_id", conversationId)
       .neq("sender_id", user.id);
 
@@ -156,16 +174,89 @@ export const getOrCreateConversation = async (otherUserId) => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) throw new Error("User not authenticated");
 
-    const { data, error } = await supabase.rpc("get_or_create_conversation", {
-      p_user1_id: user.id,
-      p_user2_id: otherUserId,
-    });
+    const currentUserId = String(user.id);
+    const otherUserIdStr = String(otherUserId);
 
-    if (error) throw error;
-    return { success: true, data };
+    // Prevent self-conversation creation
+    if (currentUserId === otherUserIdStr) {
+      console.warn("Attempted self-conversation creation, skipping...");
+      return {
+        success: false,
+        error: "Cannot create a conversation with yourself",
+      };
+    }
+
+    // Check if conversation already exists between current user and selected user
+    const { data: existingConversation, error: existingError } = await supabase
+      .from("conversations")
+      .select("*")
+      .or(
+        `and(user1_id.eq.${currentUserId},user2_id.eq.${otherUserIdStr}),and(user1_id.eq.${otherUserIdStr},user2_id.eq.${currentUserId})`
+      );
+
+    if (existingError) {
+      console.error("Error checking existing conversation:", existingError);
+      throw existingError;
+    }
+
+    if (existingConversation && existingConversation.length > 0) {
+      console.log("Found existing conversation:", existingConversation[0]);
+      return { success: true, data: existingConversation[0] };
+    }
+
+    // Insert new conversation with the correct users
+    const now = new Date().toISOString();
+    const [user1_id, user2_id] = [currentUserId, otherUserIdStr].sort();
+
+    const { data: conversation, error: conversationError } = await supabase
+      .from("conversations")
+      .insert([
+        {
+          user1_id,
+          user2_id,
+          last_message: "",
+          last_message_at: now,
+          updated_at: now,
+          created_at: now,
+          owner_id: currentUserId,
+          other_user_id: otherUserIdStr,
+        },
+      ])
+      .select();
+
+    if (conversationError) {
+      console.error("Error creating conversation:", conversationError);
+      throw conversationError;
+    }
+
+    console.log("Created new conversation:", conversation[0]);
+    return { success: true, data: conversation[0] };
   } catch (error) {
     console.error("Error in getOrCreateConversation:", error);
+    return { success: false, error };
+  }
+};
+
+export const fetchUserDetails = async (userId) => {
+  if (!userId) {
+    console.error("Error: userId is undefined");
+    return { success: false, error: "User ID is required" };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("profiles") // Ensure this is the correct table name
+      .select("id, name, bio, image") // Update with actual column names
+      .eq("id", userId)
+      .single();
+
+    if (error) throw error;
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error fetching user details:", error);
     return { success: false, error };
   }
 };

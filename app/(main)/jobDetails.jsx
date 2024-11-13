@@ -1,4 +1,4 @@
-// jobDetails.jsx
+// (main)/jobDetails.jsx
 import {
   Alert,
   ScrollView,
@@ -6,138 +6,47 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Linking,
 } from "react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {
-  fetchJobDetails,
-  createJobComment,
-  removeJobComment,
-  removeJob,
-} from "../../services/jobService";
+import { fetchJobDetails } from "../../services/jobService";
 import { hp, wp } from "../../helpers/common";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
-import JobCard from "../../components/JobCard";
 import Loading from "../../components/Loading";
-import Input from "../../components/Input";
 import Icon from "../../assets/icons";
-import CommentItem from "../../components/CommentItem";
-import { getUserData } from "../../services/userService";
-import { supabase } from "../../lib/supabase";
-import { createNotification } from "../../services/notificationService";
+import ScreenWrapper from "../../components/ScreenWrapper";
 
 const JobDetails = () => {
-  const { jobId, commentId } = useLocalSearchParams();
+  const { jobId } = useLocalSearchParams();
   const { user } = useAuth();
   const router = useRouter();
   const [startLoading, setStartLoading] = useState(true);
-  const inputRef = useRef(null);
-  const commentRef = useRef("");
-  const [loading, setLoading] = useState(false);
   const [job, setJob] = useState(null);
-
-  const handleNewComment = async (payload) => {
-    if (payload.new) {
-      let newComment = { ...payload.new };
-      let res = await getUserData(newComment.userId);
-      newComment.user = res.success ? res.data : {};
-      setJob((prevJob) => {
-        return {
-          ...prevJob,
-          comments: [newComment, ...prevJob.comments],
-        };
-      });
-    }
-  };
+  const [activeTab, setActiveTab] = useState("Job Description");
 
   useEffect(() => {
-    let commentChannel = supabase
-      .channel("job_comments")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "job_comments",
-          filter: `jobId=eq.${jobId}`,
-        },
-        handleNewComment
-      )
-      .subscribe();
-
     getJobDetails();
-
-    return () => {
-      supabase.removeChannel(commentChannel);
-    };
   }, []);
 
   const getJobDetails = async () => {
-    // Fetch job details here
     let res = await fetchJobDetails(jobId);
     if (res.success) setJob(res.data);
     setStartLoading(false);
   };
 
-  const onNewComment = async () => {
-    if (!commentRef.current) return null;
-    let data = {
-      userId: user?.id,
-      jobId: job?.id,
-      text: commentRef.current,
-    };
-    // Create job comment
-    setLoading(true);
-    let res = await createJobComment(data);
-    setLoading(false);
-    if (res.success) {
-      if (user.id != job.userId) {
-        // Send notification
-        let notify = {
-          senderId: user.id,
-          receiverId: job.userId,
-          title: "commented on your job post",
-          data: JSON.stringify({ jobId: job.id, commentId: res?.data?.id }),
-        };
-        createNotification(notify);
-      }
-      inputRef?.current?.clear();
-      commentRef.current = "";
-    } else {
-      Alert.alert("Comment", res.msg);
-    }
-  };
-
-  const onDeleteComment = async (comment) => {
-    // Deleting comment
-    let res = await removeJobComment(comment?.id);
-    if (res.success) {
-      setJob((prevJob) => {
-        let updatedJob = { ...prevJob };
-        updatedJob.comments = updatedJob.comments.filter(
-          (c) => c.id !== comment.id
-        );
-        return updatedJob;
-      });
-    } else {
-      Alert.alert("Comment", res.msg);
-    }
-  };
-
-  const onDeleteJob = async (item) => {
-    // Delete job here
-    let res = await removeJob(job.id);
-    if (res.success) {
-      router.back();
-    } else {
-      Alert.alert("Job", res.msg);
-    }
-  };
-
-  const onEditJob = async (item) => {
+  const onEditJob = () => {
     router.back();
-    router.push({ pathname: "newJob", params: { ...item } });
+    router.push({ pathname: "newJob", params: { ...job } });
+  };
+
+  const handleApply = () => {
+    if (job?.customUrl) {
+      Linking.openURL(job.customUrl);
+    } else {
+      Alert.alert("Error", "No URL provided for this job.");
+    }
   };
 
   if (startLoading) {
@@ -150,122 +59,292 @@ const JobDetails = () => {
 
   if (!job) {
     return (
-      <View
-        style={[
-          styles.center,
-          { justifyContent: "flex-start", marginTop: 100 },
-        ]}
-      >
+      <View style={[styles.center, { marginTop: 100 }]}>
         <Text style={styles.notFound}>Job not found!</Text>
       </View>
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.list}
-      >
-        <JobCard
-          job={{ ...job, comments: [{ count: job?.comments?.length }] }}
-          currentUser={user}
-          router={router}
-          hasShadow={false}
-          showMoreIcon={false}
-          showDelete={true}
-          onDelete={onDeleteJob}
-          onEdit={onEditJob}
-        />
-        {/* Comment input */}
-        <View style={styles.inputContainer}>
-          <Input
-            inputRef={inputRef}
-            placeholder="Type comment..."
-            onChangeText={(value) => (commentRef.current = value)}
-            placeholderTextColor={theme.colors.textLight}
-            containerStyle={{
-              flex: 1,
-              height: hp(6.2),
-              borderRadius: theme.radius.xl,
-            }}
-          />
-
-          {loading ? (
-            <View style={styles.loading}>
-              <Loading size="small" />
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "Job Description":
+        return (
+          <View style={styles.detailsContainer}>
+            <View style={styles.detailRow}>
+              <Text style={styles.label}>Job Type:</Text>
+              <Text style={styles.value}>
+                {job.employmentType || "Not specified"}
+              </Text>
             </View>
-          ) : (
-            <TouchableOpacity style={styles.sendIcon} onPress={onNewComment}>
-              <Icon name="send" color={theme.colors.primaryDark} />
-            </TouchableOpacity>
-          )}
-        </View>
 
-        {/* Comment list */}
-        <View style={{ marginVertical: 15, gap: 17 }}>
-          {job?.comments?.map((comment) => (
-            <CommentItem
-              key={comment?.id?.toString()}
-              item={comment}
-              onDelete={onDeleteComment}
-              highlight={comment.id == commentId}
-              canDelete={user.id == comment.userId}
-            />
-          ))}
+            <View style={styles.detailRow}>
+              <Text style={styles.label}>Salary:</Text>
+              <Text style={styles.value}>{job.salary || "Not specified"}</Text>
+            </View>
 
-          {job?.comments?.length === 0 && (
-            <Text style={{ color: theme.colors.text, marginLeft: 5 }}>
-              Be the first to comment!
+            <View style={styles.detailRow}>
+              <Text style={styles.label}>Other Pays:</Text>
+              <Text style={styles.value}>
+                {job.otherPays || "Not specified"}
+              </Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.label}>Employment Type:</Text>
+              <Text style={styles.value}>
+                {job.employmentType || "Not specified"}
+              </Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.label}>Education:</Text>
+              <Text style={styles.value}>
+                {job.educationLevel || "Not specified"}
+              </Text>
+            </View>
+
+            <Text style={styles.sectionTitle}>Job Description</Text>
+            <View style={styles.descriptionContainer}>
+              {job.jobDescription ? (
+                job.jobDescription.split("\n").map((item, index) => (
+                  <Text key={index} style={styles.descriptionItem}>
+                    • {item}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.descriptionItem}>
+                  No job description provided.
+                </Text>
+              )}
+            </View>
+
+            <Text style={styles.sectionTitle}>Application Question(s):</Text>
+            <View style={styles.questionsContainer}>
+              {job.applicationQuestions ? (
+                job.applicationQuestions.map((question, index) => (
+                  <Text key={index} style={styles.question}>
+                    • {question}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.question}>
+                  No specific questions provided.
+                </Text>
+              )}
+            </View>
+          </View>
+        );
+      case "Company Details":
+        return (
+          <View>
+            <Text style={styles.sectionTitle}>Company Details</Text>
+            <Text style={styles.value}>Name: {job.companyName || "N/A"}</Text>
+            <Text style={styles.value}>Industry: {job.industry || "N/A"}</Text>
+            <Text style={styles.value}>
+              Website: {job.companyWebsite || "N/A"}
             </Text>
-          )}
-        </View>
-      </ScrollView>
-    </View>
+            <Text style={styles.value}>
+              Description: {job.companyDescription || "N/A"}
+            </Text>
+          </View>
+        );
+      case "Contact Information":
+        return (
+          <View>
+            <Text style={styles.sectionTitle}>Contact Information</Text>
+            <Text style={styles.value}>
+              Contact Name: {job.contactName || "N/A"}
+            </Text>
+            <Text style={styles.value}>Email: {job.email || "N/A"}</Text>
+            <Text style={styles.value}>Phone: {job.phone || "N/A"}</Text>
+          </View>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <ScreenWrapper>
+      <View style={styles.container}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+        >
+          {/* Header Section */}
+          <View style={styles.header}>
+            <Text style={styles.title}>{job.title}</Text>
+            <View style={styles.locationContainer}>
+              <Icon name="job" size={16} color={theme.colors.textLight} />
+              <Text style={styles.mandatory}>{job.industry}</Text>
+              <Icon name="location" size={16} color={theme.colors.textLight} />
+              <Text style={styles.location}>
+                {job.location || "Location not specified"}
+              </Text>
+            </View>
+            <Text style={styles.postedBy}>
+              Posted by {job.companyName || "Unknown"} •{" "}
+              {new Date(job.created_at).toDateString()}
+            </Text>
+          </View>
+
+          {/* Apply Button */}
+          <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
+            <Text style={styles.applyButtonText}>APPLY FOR THE JOB</Text>
+          </TouchableOpacity>
+
+          {/* Tab Sections */}
+          <View style={styles.tabContainer}>
+            {["Job Description", "Company Details", "Contact Information"].map(
+              (tab) => (
+                <TouchableOpacity
+                  key={tab}
+                  style={activeTab === tab ? styles.tabActive : styles.tab}
+                  onPress={() => setActiveTab(tab)}
+                >
+                  <Text
+                    style={
+                      activeTab === tab ? styles.tabTextActive : styles.tabText
+                    }
+                  >
+                    {tab}
+                  </Text>
+                </TouchableOpacity>
+              )
+            )}
+          </View>
+
+          {/* Render content based on the selected tab */}
+          {renderTabContent()}
+        </ScrollView>
+      </View>
+    </ScreenWrapper>
   );
 };
-
-export default JobDetails;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "white",
-    paddingVertical: wp(7),
   },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  list: {
-    paddingHorizontal: wp(4),
-  },
-  sendIcon: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 0.8,
-    borderColor: theme.colors.primary,
-    borderRadius: theme.radius.lg,
-    borderCurve: "continuous",
-    height: hp(5.8),
-    width: hp(5.8),
+  content: {
+    padding: wp(4),
   },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
+  header: {
+    marginBottom: hp(2),
+    alignItems: "center", // Center title and content
+  },
+  title: {
+    fontSize: hp(2.5),
+    fontWeight: theme.fonts.semibold,
+    color: theme.colors.text,
+    textAlign: "center", // Center title text
+    marginBottom: hp(1),
+  },
+  locationContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(2),
+    marginBottom: hp(1),
+  },
+  mandatory: {
+    color: theme.colors.textLight,
+    fontSize: hp(1.8),
+  },
+  location: {
+    color: theme.colors.textLight,
+    fontSize: hp(1.8),
+  },
+  postedBy: {
+    color: theme.colors.textLight,
+    fontSize: hp(1.7),
+  },
+  applyButton: {
+    backgroundColor: theme.colors.primary,
+    padding: hp(2),
+    borderRadius: theme.radius.lg,
+    alignItems: "center",
+    marginVertical: hp(2),
+  },
+  applyButtonText: {
+    color: "white",
+    fontSize: hp(2),
+    fontWeight: theme.fonts.medium,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    marginBottom: hp(2),
+    gap: wp(4),
+  },
+  tab: {
+    paddingVertical: hp(1),
+  },
+  tabActive: {
+    paddingVertical: hp(1),
+    borderBottomWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  tabText: {
+    color: theme.colors.textLight,
+    fontSize: hp(1.8),
+  },
+  tabTextActive: {
+    color: theme.colors.primary,
+    fontSize: hp(1.8),
+    fontWeight: theme.fonts.medium,
+  },
+  detailsContainer: {
+    gap: hp(2),
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(2),
+  },
+  label: {
+    fontSize: hp(1.8),
+    color: theme.colors.text,
+    fontWeight: theme.fonts.medium,
+    width: wp(25),
+  },
+  value: {
+    fontSize: hp(1.8),
+    color: theme.colors.text,
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: hp(2),
+    fontWeight: theme.fonts.semibold,
+    color: theme.colors.text,
+    marginTop: hp(2),
+    marginBottom: hp(1),
+  },
+  descriptionContainer: {
+    gap: hp(1),
+  },
+  descriptionItem: {
+    fontSize: hp(1.8),
+    color: theme.colors.text,
+    lineHeight: hp(2.8),
+  },
+  questionsContainer: {
+    gap: hp(1.5),
+  },
+  question: {
+    fontSize: hp(1.8),
+    color: theme.colors.text,
+    lineHeight: hp(2.8),
+  },
   notFound: {
     fontSize: hp(2.5),
     color: theme.colors.text,
     fontWeight: theme.fonts.medium,
   },
-  loading: {
-    height: hp(5.8),
-    width: hp(5.8),
-    justifyContent: "center",
-    alignItems: "center",
-    transform: [{ scale: 1.3 }],
-  },
 });
+
+export default JobDetails;

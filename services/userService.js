@@ -58,17 +58,41 @@ export const updateUser = async (userId, data) => {
 export const fetchUsers = async () => {
   try {
     const { data, error } = await supabase
-      .from("users") // Adjust to your table name
-      .select("id, name, image"); // Select the fields you need
+      .from("users")
+      .select("id, name, image");
+
+    // Debug log the raw response
+    console.log("Raw Supabase response:", { data, error });
 
     if (error) {
       console.error("fetchUsers error:", error);
       return { success: false, msg: "Could not fetch users" };
     }
 
-    return { success: true, data };
+    // Ensure we have an array of properly formatted user objects
+    const sanitizedData =
+      data?.map((user) => ({
+        id: user.id?.toString() || "", // Ensure ID is a string
+        name: user.name?.toString() || "",
+        image: user.image?.toString() || null,
+      })) || [];
+
+    // Debug log the sanitized data
+    console.log("Sanitized data:", sanitizedData);
+
+    if (!sanitizedData || sanitizedData.length === 0) {
+      return { success: false, msg: "No users found." };
+    }
+
+    return {
+      success: true,
+      data: sanitizedData,
+    };
   } catch (error) {
-    console.error("fetchUsers error:", error);
-    return { success: false, msg: "Could not fetch users" };
+    console.error("fetchUsers unexpected error:", error);
+    return {
+      success: false,
+      msg: "Could not fetch users due to a network or server error.",
+    };
   }
 };

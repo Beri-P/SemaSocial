@@ -1,14 +1,22 @@
+// imageService.js
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system";
 import { supabase } from "../lib/supabase";
 import { supabaseUrl } from "../constants";
 
 export const getUserImageSrc = (imagePath) => {
-  if (imagePath) {
-    return getSupabaseFileUrl(imagePath);
-  } else {
-    return require("../assets/images/defaultUser.png");
+  // Return a default avatar image if no imagePath is provided
+  if (!imagePath) {
+    return require("../assets/images/defaultUser.png"); // Update path if using 'default-avatar.png'
   }
+
+  // If the imagePath is a full URL, return it directly
+  if (imagePath.startsWith("http")) {
+    return { uri: imagePath };
+  }
+
+  // Otherwise, assume it's a storage path and use getSupabaseFileUrl to construct the URL
+  return getSupabaseFileUrl(imagePath);
 };
 
 export const getSupabaseFileUrl = (filePath) => {
@@ -40,7 +48,7 @@ export const uploadFile = async (folderName, fileUri, isImage = true) => {
     const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
-    let imageData = decode(fileBase64); //array Buffer
+    let imageData = decode(fileBase64); // array buffer
     let { data, error } = await supabase.storage
       .from("uploads")
       .upload(fileName, imageData, {
