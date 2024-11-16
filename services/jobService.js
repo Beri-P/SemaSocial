@@ -173,33 +173,78 @@ export const fetchJobsByCompany = async (companyName) => {
 // Create or update a job
 export const createOrUpdateJob = async (job) => {
   try {
+    console.log("Starting createOrUpdateJob with data:", job);
+
+    // Handle file upload if there's a new file
     if (job.file && typeof job.file === "object") {
+      console.log("Uploading file...");
       const isImage = job?.file?.type === "image";
       const folderName = isImage ? "jobImages" : "jobVideos";
       const fileResult = await uploadFile(folderName, job?.file?.uri, isImage);
 
+      console.log("File upload result:", fileResult);
+
       if (fileResult.success) {
         job.file = fileResult.data;
       } else {
+        console.error("File upload failed:", fileResult);
         return fileResult;
       }
     }
 
+    // Clean up the job object to match the database schema
+    const jobData = {
+      userId: job.userId,
+      title: job.title,
+      companyName: job.companyName,
+      companyWebsite: job.companyWebsite,
+      companyDescription: job.companyDescription,
+      industry: job.industry,
+      employmentType: job.employmentType,
+      skills: job.skills,
+      jobDescription: job.jobDescription,
+      salary: job.salary,
+      otherPays: job.otherPays,
+      requiredExperience: job.requiredExperience,
+      educationLevel: job.educationLevel,
+      contactName: job.contactName,
+      email: job.email,
+      phone: job.phone,
+      file: job.file,
+      privacy: job.privacy,
+      commentPrivacy: job.commentPrivacy,
+      status: job.status,
+      updated_at: job.updated_at,
+    };
+
+    if (job.id) {
+      jobData.id = job.id;
+    }
+
+    console.log("Sending to Supabase:", jobData);
+
     const { data, error } = await supabase
       .from("jobs")
-      .upsert(job)
+      .upsert(jobData)
       .select()
       .single();
 
     if (error) {
-      console.log("createOrUpdateJob error", error);
-      return { success: false, msg: "Failed to create/update the job" };
+      console.error("Supabase error:", error);
+      return {
+        success: false,
+        msg: error.message || "Failed to create/update the job",
+      };
     }
 
+    console.log("Job saved successfully:", data);
     return { success: true, data };
   } catch (error) {
-    console.log("createOrUpdateJob error", error);
-    return { success: false, msg: "An unexpected error occurred" };
+    console.error("createOrUpdateJob error:", error);
+    return {
+      success: false,
+      msg: error.message || "An unexpected error occurred",
+    };
   }
 };
 

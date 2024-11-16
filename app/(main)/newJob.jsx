@@ -185,19 +185,66 @@ const NewJob = () => {
       return;
     }
 
-    const data = { ...jobDetails, file, userId: user?.id };
-    if (job && job.id) data.id = job.id;
+    // Add console logs for debugging
+    console.log("Starting job submission...");
+    console.log("User ID:", user?.id);
+    console.log("Job Details:", jobDetails);
 
-    setLoading(true);
-    const response = await createOrUpdateJob(data);
-    setLoading(false);
+    try {
+      setLoading(true);
 
-    if (response.success) {
-      setFile(null);
-      setJobDetails({});
-      router.back();
-    } else {
-      Alert.alert("Job", response.msg);
+      // Validate user authentication
+      if (!user?.id) {
+        Alert.alert("Error", "You must be logged in to post a job.");
+        setLoading(false);
+        return;
+      }
+
+      const data = {
+        ...jobDetails,
+        file,
+        userId: user.id,
+        // Add default values for required fields
+        status: jobDetails.status || "active",
+        privacy: jobDetails.privacy || "all_members",
+        commentPrivacy: jobDetails.commentPrivacy || "all_members",
+      };
+
+      if (job && job.id) {
+        data.id = job.id;
+        data.updated_at = new Date().toISOString();
+      }
+
+      console.log("Submitting job data:", data);
+
+      const response = await createOrUpdateJob(data);
+      console.log("Job submission response:", response);
+
+      if (response.success) {
+        Alert.alert(
+          "Success",
+          job && job.id
+            ? "Job updated successfully"
+            : "Job created successfully",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setFile(null);
+                setJobDetails({});
+                router.back();
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Error", response.msg || "Failed to save job");
+      }
+    } catch (error) {
+      console.error("Job submission error:", error);
+      Alert.alert("Error", "An unexpected error occurred while saving the job");
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -24,7 +24,7 @@ import PostCard from "../../components/PostCard";
 import { supabase } from "../../lib/supabase";
 
 const Profile = ({ userId = null }) => {
-  const { user: loggedInUser } = useAuth();
+  const { user: loggedInUser, signOut } = useAuth();
   const router = useRouter();
   const [profileUser, setProfileUser] = useState(null);
   const [posts, setPosts] = useState([]);
@@ -32,6 +32,7 @@ const Profile = ({ userId = null }) => {
   const [loading, setLoading] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Reset all states when userId changes
   const resetStates = useCallback(() => {
@@ -43,14 +44,30 @@ const Profile = ({ userId = null }) => {
     setProfileUser(null);
   }, []);
 
-  // Load user data (profile)
+  // Load user data (profile) with proper null checks and complete data fetching
   const loadUserData = useCallback(async () => {
     try {
-      let profile;
-      // If no userId is provided or if userId matches logged in user, show logged in user's profile
-      if (!userId || userId === loggedInUser.id) {
-        profile = loggedInUser;
-      } else {
+      let profile = null;
+
+      // Check if we're viewing our own profile
+      if (loggedInUser?.id && (!userId || userId === loggedInUser.id)) {
+        // Fetch fresh profile data for logged in user to ensure we have all fields
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", loggedInUser.id)
+          .single();
+
+        if (error) throw error;
+
+        // Merge fresh profile data with logged in user data
+        profile = {
+          ...loggedInUser,
+          ...data,
+        };
+      }
+      // Check if we're viewing someone else's profile
+      else if (userId) {
         const res = await getProfileById(userId);
         if (res.success) {
           profile = res.data;
@@ -59,6 +76,7 @@ const Profile = ({ userId = null }) => {
           return;
         }
       }
+
       setProfileUser(profile);
     } catch (error) {
       console.error("Error loading user data:", error);
@@ -71,13 +89,12 @@ const Profile = ({ userId = null }) => {
   // Reset state and load new data when userId changes
   useEffect(() => {
     resetStates();
-    loadUserData();
-
-    // Cleanup function
-    return () => {
-      resetStates();
-    };
-  }, [userId, loggedInUser.id, resetStates, loadUserData]);
+    // Only load user data if we have a logged-in user
+    if (loggedInUser?.id) {
+      loadUserData();
+    }
+    return resetStates;
+  }, [userId, loggedInUser, resetStates, loadUserData]);
 
   // Load posts for the profile user
   const loadPosts = useCallback(async () => {
@@ -126,19 +143,31 @@ const Profile = ({ userId = null }) => {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    if (isLoggingOut) return; // Prevent multiple logout attempts
+
     Alert.alert("Confirm", "Are you sure you want to log out?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
+      { text: "Cancel", style: "cancel" },
       {
         text: "Logout",
         style: "destructive",
         onPress: async () => {
-          const { error } = await supabase.auth.signOut();
-          if (error) {
-            Alert.alert("Sign out", "Error signing out!");
+          try {
+            setIsLoggingOut(true); // Set logging out state
+
+            // First clear all local states
+            resetStates();
+
+            // Then attempt to sign out
+            if (signOut) {
+              await signOut();
+              // The auth state change in AuthContext will handle navigation
+            }
+          } catch (err) {
+            console.error("Error during sign out:", err);
+            Alert.alert("Error", "Failed to sign out. Please try again.");
+          } finally {
+            setIsLoggingOut(false);
           }
         },
       },
@@ -149,8 +178,9 @@ const Profile = ({ userId = null }) => {
     return <Loading />;
   }
 
-  // Check if we're viewing our own profile
-  const isOwnProfile = !userId || userId === loggedInUser.id;
+  // Check if we're viewing our own profile with proper null check
+  const isOwnProfile =
+    loggedInUser?.id && (!userId || userId === loggedInUser.id);
 
   return (
     <ScreenWrapper bg="white">
@@ -213,7 +243,8 @@ const UserHeader = ({
   const [followersList, setFollowersList] = useState([]);
   const [followingList, setFollowingList] = useState([]);
 
-  const isFollowing = profileUser?.followers?.includes(loggedInUser.id);
+  // Add null check for loggedInUser
+  const isFollowing = profileUser?.followers?.includes(loggedInUser?.id);
 
   useEffect(() => {
     const fetchFollowCounts = async () => {
@@ -229,10 +260,10 @@ const UserHeader = ({
         if (error) throw error;
 
         // Ensure followers and following are arrays, defaulting to empty arrays if null
-        const followers = Array.isArray(profile.followers)
+        const followers = Array.isArray(profile?.followers)
           ? profile.followers
           : [];
-        const following = Array.isArray(profile.following)
+        const following = Array.isArray(profile?.following)
           ? profile.following
           : [];
 
@@ -240,26 +271,32 @@ const UserHeader = ({
         setFollowingCount(following.length);
 
         // Update the profileUser state with the correct arrays
-        setProfileUser((prev) => ({
-          ...prev,
-          followers: followers,
-          following: following,
-        }));
+        setProfileUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                followers: followers,
+                following: following,
+              }
+            : null
+        );
 
-        // Fetch detailed followers information
-        const { data: followersData } = await supabase
-          .from("profiles")
-          .select("*")
-          .in("id", followers);
+        // Only fetch detailed information if we have IDs
+        if (followers.length > 0) {
+          const { data: followersData } = await supabase
+            .from("profiles")
+            .select("*")
+            .in("id", followers);
+          setFollowersList(followersData || []);
+        }
 
-        // Fetch detailed following information
-        const { data: followingData } = await supabase
-          .from("profiles")
-          .select("*")
-          .in("id", following);
-
-        setFollowersList(followersData || []);
-        setFollowingList(followingData || []);
+        if (following.length > 0) {
+          const { data: followingData } = await supabase
+            .from("profiles")
+            .select("*")
+            .in("id", following);
+          setFollowingList(followingData || []);
+        }
       } catch (error) {
         console.error("Error fetching follow counts:", error);
       }
@@ -268,7 +305,48 @@ const UserHeader = ({
     fetchFollowCounts();
   }, [profileUser?.id]);
 
+  // Set up real-time subscription for profile updates
   useEffect(() => {
+    if (profileUser?.id) {
+      const channel = supabase
+        .channel(`profile-${profileUser.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${profileUser.id}`,
+          },
+          async (payload) => {
+            if (payload.new) {
+              // Fetch complete profile data
+              const { data: freshProfile, error } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", profileUser.id)
+                .single();
+
+              if (!error && freshProfile) {
+                setProfileUser((prev) => ({
+                  ...prev,
+                  ...freshProfile,
+                  followers: payload.new.followers,
+                  following: payload.new.following,
+                }));
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        channel.unsubscribe();
+      };
+    }
+  }, [profileUser?.id]);
+
+  /*useEffect(() => {
     if (profileUser?.id) {
       const channel = supabase
         .channel(`profile-${profileUser.id}`)
@@ -296,7 +374,7 @@ const UserHeader = ({
         channel.unsubscribe();
       };
     }
-  }, [profileUser?.id, setProfileUser]);
+  }, [profileUser?.id, setProfileUser]);*/
 
   useEffect(() => {
     if (profileUser?.id) {
@@ -339,75 +417,98 @@ const UserHeader = ({
   }, [profileUser?.id]);
 
   const handleFollowToggle = async () => {
+    // Add null checks for both users
+    if (!profileUser?.id || !loggedInUser?.id) {
+      console.error("Missing user ID for follow operation");
+      Alert.alert(
+        "Error",
+        "Unable to perform this action. Please try again later."
+      );
+      return;
+    }
+
     try {
       const profileOwnerId = profileUser.id;
       const loggedInUserId = loggedInUser.id;
-  
+
       // First fetch both profiles
       const { data: ownerProfile, error: ownerError } = await supabase
         .from("profiles")
         .select("followers")
         .eq("id", profileOwnerId)
         .single();
-  
-      if (ownerError) throw new Error(`Error fetching profile owner: ${ownerError.message}`);
-  
+
+      if (ownerError)
+        throw new Error(`Error fetching profile owner: ${ownerError.message}`);
+
       const { data: loggedInUserProfile, error: loggedInError } = await supabase
         .from("profiles")
         .select("following")
         .eq("id", loggedInUserId)
         .single();
-  
-      if (loggedInError) throw new Error(`Error fetching logged in user: ${loggedInError.message}`);
-  
+
+      if (loggedInError)
+        throw new Error(
+          `Error fetching logged in user: ${loggedInError.message}`
+        );
+
       // Safely handle null values from database
       const currentFollowers = ownerProfile?.followers || [];
       const currentFollowing = loggedInUserProfile?.following || [];
-  
+
       // Check if currently following
       const isCurrentlyFollowing = currentFollowers.includes(loggedInUserId);
-  
+
       // Prepare updates
       let updatedFollowers, updatedFollowing;
-  
+
       if (isCurrentlyFollowing) {
         // Remove from followers/following
-        updatedFollowers = currentFollowers.filter(id => id !== loggedInUserId);
-        updatedFollowing = currentFollowing.filter(id => id !== profileOwnerId);
+        updatedFollowers = currentFollowers.filter(
+          (id) => id !== loggedInUserId
+        );
+        updatedFollowing = currentFollowing.filter(
+          (id) => id !== profileOwnerId
+        );
       } else {
         // Add to followers/following
         updatedFollowers = [...new Set([...currentFollowers, loggedInUserId])];
         updatedFollowing = [...new Set([...currentFollowing, profileOwnerId])];
       }
-  
+
       // Update profiles separately
       const { error: updateOwnerError } = await supabase
         .from("profiles")
         .update({
           followers: updatedFollowers,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq("id", profileOwnerId);
-  
-      if (updateOwnerError) throw new Error(`Error updating profile owner: ${updateOwnerError.message}`);
-  
+
+      if (updateOwnerError)
+        throw new Error(
+          `Error updating profile owner: ${updateOwnerError.message}`
+        );
+
       const { error: updateLoggedInError } = await supabase
         .from("profiles")
         .update({
           following: updatedFollowing,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq("id", loggedInUserId);
-  
-      if (updateLoggedInError) throw new Error(`Error updating logged in user: ${updateLoggedInError.message}`);
-  
+
+      if (updateLoggedInError)
+        throw new Error(
+          `Error updating logged in user: ${updateLoggedInError.message}`
+        );
+
       // Update local state
       setFollowerCount(updatedFollowers.length);
-      setProfileUser(prev => ({
+      setProfileUser((prev) => ({
         ...prev,
         followers: updatedFollowers,
       }));
-  
     } catch (error) {
       console.error("Error updating follow status:", error);
       Alert.alert(

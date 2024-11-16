@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import React, { useRef, useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
 import ScreenWrapper from "../components/ScreenWrapper";
 import { theme } from "../constants/theme";
 import Icon from "../assets/icons";
@@ -21,26 +22,36 @@ import { supabase } from "../lib/supabase";
 
 const login = () => {
   const router = useRouter();
-  const emailRef = useRef("");
-  const passwordRef = useRef("");
+  const { signIn } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {
-    if (!emailRef.current || !passwordRef.current) {
+    if (!email || !password) {
       Alert.alert("Login", "Please fill all the fields!");
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: emailRef.current.trim(),
-      password: passwordRef.current.trim(),
-    });
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
 
-    if (error) {
-      Alert.alert("Login", error.message);
-    } else {
-      Alert.alert("Login", "Logged in successfully!");
-      router.push("/home"); // Redirect after login
+      if (error) throw error;
+
+      if (data?.user) {
+        await signIn(data.user);
+      } else {
+        throw new Error("No user data received");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      Alert.alert("Login", error.message || "An error occurred during login");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -64,13 +75,17 @@ const login = () => {
           <Input
             icon={<Icon name="mail" size={26} strokeWidth={1.6} />}
             placeholder="Enter your email"
-            onChangeText={(value) => (emailRef.current = value)}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
           />
           <Input
             icon={<Icon name="lock" size={26} strokeWidth={1.6} />}
             placeholder="Enter your password"
+            value={password}
+            onChangeText={setPassword}
             secureTextEntry
-            onChangeText={(value) => (passwordRef.current = value)}
           />
           <Pressable onPress={() => router.push("forgotPassword")}>
             <Text style={styles.forgotPassword}>Forgot Password?</Text>

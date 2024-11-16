@@ -1,48 +1,25 @@
 // app/_layout.jsx
 import { LogBox } from "react-native";
-import React, { useEffect } from "react";
-import { Stack, useRouter } from "expo-router";
-import { AuthProvider, useAuth } from "../contexts/AuthContext";
+import React from "react";
+import { Stack } from "expo-router";
+import { AuthProvider } from "../contexts/AuthContext";
 import { VideoProvider } from "../contexts/VideoContext";
-import { supabase } from "../lib/supabase";
-import { getUserData } from "../services/userService";
 
+// Ignore specific logs that are not relevant to app functionality
 LogBox.ignoreLogs([
   "Warning: TRenderEngineProvider: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.",
   "Warning: MemoizedTNodeRenderer: Support for defaultProps will be removed from memo components in a future major release. Use JavaScript default parameters instead.",
   "Warning: TNodeChildrenRenderer: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.",
 ]);
 
-const MainLayout = () => {
-  const { setAuth, setUserData } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        console.log("session user: ", session?.user?.id);
-
-        if (session) {
-          setAuth(session.user);
-          updateUserData(session.user);
-          router.replace("/tabs/home");
-        } else {
-          setAuth(null);
-          router.replace("/welcome");
-        }
-      }
-    );
-
-    return () => {
-      authListener?.unsubscribe();
-    };
-  }, []);
-
-  const updateUserData = async (user) => {
-    let res = await getUserData(user.id);
-    if (res.success) setUserData(res.data);
+// Set up a global handler for unhandled promise rejections in development mode only
+if (__DEV__) {
+  globalThis.onunhandledrejection = (event) => {
+    console.error("Unhandled Promise Rejection:", event.reason);
   };
+}
 
+const MainLayout = () => {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -53,6 +30,7 @@ const MainLayout = () => {
   );
 };
 
+// Wrap MainLayout with necessary providers for app-wide contexts
 const Layout = () => (
   <AuthProvider>
     <VideoProvider>

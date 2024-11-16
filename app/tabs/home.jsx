@@ -329,6 +329,9 @@ const Home = () => {
 
   // Setup Supabase channels
   useEffect(() => {
+    if (!user) return; // Exit early if user is not defined
+
+    // Setup Supabase channels
     const channels = [
       {
         name: "posts",
@@ -345,7 +348,7 @@ const Home = () => {
           event: "INSERT",
           schema: "public",
           table: "notifications",
-          filter: `receiverId=eq.${user.id}`,
+          filter: `receiverId=eq.${user.id}`, // Only set filter if user.id exists
         },
         handler: handleNewNotification,
       },
@@ -380,7 +383,7 @@ const Home = () => {
       activeChannels.forEach((channel) => supabase.removeChannel(channel));
     };
   }, [
-    user.id,
+    user,
     handlePostEvent,
     handleNewNotification,
     handleCommentEvent,
