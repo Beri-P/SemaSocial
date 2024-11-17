@@ -21,7 +21,7 @@ const MessageCard = ({ conversation, onPress, currentUserId }) => {
       activeOpacity={0.7}
     >
       <View style={styles.avatarContainer}>
-        <Avatar uri={other_user?.avatar_url} size={50} />
+        <Avatar uri={other_user?.image} size={50} />
       </View>
       <View style={styles.content}>
         <View style={styles.header}>
@@ -41,7 +41,7 @@ const MessageCard = ({ conversation, onPress, currentUserId }) => {
             numberOfLines={2}
             ellipsizeMode="tail"
           >
-            {last_message}
+            {last_message || "No messages yet"}
           </Text>
           {isUnread && (
             <View style={styles.unreadBadge}>
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   unreadContainer: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary + "10",
     borderColor: theme.colors.primary,
   },
   avatarContainer: {

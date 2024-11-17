@@ -37,7 +37,7 @@ export const fetchPosts = async (limit = 10, offset = 0, userId) => {
     let query = supabase
       .from("posts")
       .select(
-        "*, user: users (id, name, image), postLikes (*), comments (count)"
+        "*, user: profiles (id, name, image), postLikes (*), comments (count)"
       )
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -67,7 +67,7 @@ export const fetchPostDetails = async (postId) => {
     const { data, error } = await supabase
       .from("posts")
       .select(
-        "*, user: users (id, name, image), postLikes (*), comments (*, user: users(id, name, image))"
+        "*, user: profiles (id, name, image), postLikes (*), comments (*, user: profiles(id, name, image))"
       )
       .eq("id", postId)
       .order("created_at", { ascending: false, foreignTable: "comments" })

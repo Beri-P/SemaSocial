@@ -19,17 +19,17 @@ import { fetchJobsByCompany } from "../services/jobService";
 const CompanyJobs = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { companyId, companyName } = useLocalSearchParams();
+  const { companyName } = useLocalSearchParams();
   const router = useRouter();
 
   useEffect(() => {
     getJobs();
-  }, [companyId]);
+  }, [companyName]);
 
   const getJobs = async () => {
     setLoading(true);
     try {
-      const res = await fetchJobsByCompany(companyId);
+      const res = await fetchJobsByCompany(companyName);
       if (res.success) {
         setJobs(res.data);
       }

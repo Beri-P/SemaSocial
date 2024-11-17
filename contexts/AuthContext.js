@@ -1,6 +1,6 @@
-//AuthContext.js
+// AuthContext.js
 import { createContext, useContext, useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../lib/supabase"; // Use named import
 import { useRouter } from "expo-router";
 
 const AuthContext = createContext();
@@ -46,6 +46,10 @@ export const AuthProvider = ({ children }) => {
 
     const initializeAuth = async () => {
       try {
+        if (!supabase?.auth) {
+          throw new Error("Supabase client not properly initialized");
+        }
+
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -108,7 +112,7 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe?.();
     };
   }, []);
 
@@ -151,21 +155,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  console.log("Auth state:", { user, isLoading });
+  const value = {
+    user,
+    isLoading,
+    signIn,
+    signOut,
+    setUserData,
+  };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        signIn,
-        signOut,
-        setUserData,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  console.log("Auth Provider value:", value);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

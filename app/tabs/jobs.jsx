@@ -17,64 +17,20 @@ import JobCard from "../../components/JobCard";
 import Loading from "../../components/Loading";
 import { fetchJobs } from "../../services/jobService";
 
+// Category data structure remains the same, but without static job counts
 const categories = [
-  { id: 1, name: "Accounting", jobs: "2K", icon: "accounting" },
-  { id: 2, name: "Administration", jobs: "2.8K", icon: "administration" },
-  { id: 3, name: "Hospitality", jobs: "79", icon: "hospitality" },
-  { id: 4, name: "Audit", jobs: "50", icon: "audit" },
-  { id: 5, name: "Media", jobs: "702", icon: "media" },
-  { id: 6, name: "Automotive", jobs: "2", icon: "automotive" },
-  { id: 7, name: "Architectural", jobs: "163", icon: "architectural" },
-  { id: 8, name: "Agricultural", jobs: "281", icon: "agriculture" },
-  { id: 9, name: "Programming", jobs: "1.4K", icon: "programming" },
+  { id: 1, name: "Accounting", icon: "accounting" },
+  { id: 2, name: "Administration", icon: "administration" },
+  { id: 3, name: "Hospitality", icon: "hospitality" },
+  { id: 4, name: "Audit", icon: "audit" },
+  { id: 5, name: "Media", icon: "media" },
+  { id: 6, name: "Automotive", icon: "automotive" },
+  { id: 7, name: "Architectural", icon: "architectural" },
+  { id: 8, name: "Agricultural", icon: "agriculture" },
+  { id: 9, name: "Programming", icon: "programming" },
 ];
 
-const companies = [
-  {
-    id: 1,
-    name: "MNR Solutions Pvt. Ltd",
-    category: "Consulting",
-    jobs: 1,
-    applications: 0,
-  },
-  {
-    id: 2,
-    name: "Adili Group",
-    category: "Consulting",
-    jobs: 2,
-    applications: 0,
-  },
-  {
-    id: 3,
-    name: "ACORN Law",
-    category: "Legal Services",
-    jobs: 2,
-    applications: 0,
-  },
-  {
-    id: 4,
-    name: "Timeless Timber",
-    category: "Electrical/Electronic Manufacturing",
-    jobs: 2,
-    applications: 0,
-  },
-  {
-    id: 5,
-    name: "Cottar's Safaris",
-    category: "Hospitality",
-    jobs: 2,
-    applications: 0,
-  },
-  {
-    id: 6,
-    name: "G&A Advocates",
-    category: "Legal Services",
-    jobs: 3,
-    applications: 0,
-  },
-];
-
-const CategoryCard = ({ category, onPress }) => (
+const CategoryCard = ({ category, jobCount, onPress }) => (
   <TouchableOpacity
     style={styles.categoryCard}
     onPress={() => onPress(category)}
@@ -83,24 +39,18 @@ const CategoryCard = ({ category, onPress }) => (
       <Icon name={category.icon} size={40} color={theme.colors.primary} />
     </View>
     <Text style={styles.categoryName}>{category.name}</Text>
-    <Text style={styles.categoryJobs}>{category.jobs} jobs</Text>
+    <Text style={styles.categoryJobs}>{jobCount} jobs</Text>
   </TouchableOpacity>
 );
 
 const CompanyCard = ({ company, onPress }) => (
   <TouchableOpacity style={styles.companyCard} onPress={() => onPress(company)}>
-    <Image
-      source={require("../../assets/images/defaultUser.png")}
-      style={styles.companyLogo}
-    />
     <View style={styles.companyInfo}>
-      <Text style={styles.companyName}>{company.name}</Text>
-      <Text style={styles.companyCategory}>{company.category}</Text>
+      <Text style={styles.companyName}>{company.companyName}</Text>
+      <Text style={styles.companyCategory}>{company.industry}</Text>
       <View style={styles.companyStats}>
-        <Icon name="media" size={16} color={theme.colors.textLight} />
-        <Text style={styles.statText}>{company.applications}</Text>
         <Icon name="job" size={16} color={theme.colors.textLight} />
-        <Text style={styles.statText}>{company.jobs}</Text>
+        <Text style={styles.statText}>{company.jobCount} jobs</Text>
       </View>
     </View>
   </TouchableOpacity>
@@ -109,13 +59,20 @@ const CompanyCard = ({ company, onPress }) => (
 const Jobs = () => {
   const [activeTab, setActiveTab] = useState("Browse Job");
   const [jobs, setJobs] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [categoryJobCounts, setCategoryJobCounts] = useState({});
   const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
   const limit = 10;
 
   useEffect(() => {
     if (activeTab === "Browse Job") {
       getJobs();
+    } else if (activeTab === "Browse Companies") {
+      getCompanies();
+    } else if (activeTab === "Browse Categories") {
+      getCategoryJobCounts();
     }
   }, [activeTab]);
 
@@ -126,45 +83,122 @@ const Jobs = () => {
       if (jobs.length === res.data.length) setHasMore(false);
       setJobs(res.data);
     }
+    setLoading(false);
   };
 
+  const getCompanies = async () => {
+    try {
+      const res = await fetchJobs(1000); // Fetch a large number of jobs to process company data
+      if (res.success) {
+        // Process jobs to get unique companies with job counts
+        const companyMap = new Map();
+        res.data.forEach((job) => {
+          if (!companyMap.has(job.companyName)) {
+            companyMap.set(job.companyName, {
+              companyName: job.companyName,
+              industry: job.industry,
+              companyDescription: job.companyDescription,
+              jobCount: 1,
+            });
+          } else {
+            companyMap.get(job.companyName).jobCount++;
+          }
+        });
+        setCompanies(Array.from(companyMap.values()));
+      }
+    } catch (error) {
+      console.error("Error fetching companies:", error);
+    }
+    setLoading(false);
+  };
+
+  const getCategoryJobCounts = async () => {
+    try {
+      const res = await fetchJobs(1000); // Fetch a large number of jobs to process category counts
+      if (res.success) {
+        const counts = {};
+        res.data.forEach((job) => {
+          if (job.category) {
+            counts[job.category] = (counts[job.category] || 0) + 1;
+          }
+        });
+        setCategoryJobCounts(counts);
+      }
+    } catch (error) {
+      console.error("Error fetching category counts:", error);
+    }
+    setLoading(false);
+  };
+
+  const handleCategoryPress = (category) => {
+    router.push({
+      pathname: "/categoryJobs",
+      params: { category: category.name },
+    });
+  };
+
+  const handleCompanyPress = (company) => {
+    router.push({
+      pathname: "/companyJobs",
+      params: {
+        companyName: company.companyName,
+      },
+    });
+  };
+
+  const renderJobsList = () => (
+    <FlatList
+      key="jobsList"
+      data={jobs}
+      showsVerticalScrollIndicator={false}
+      keyExtractor={(item) => item.id.toString()}
+      renderItem={({ item }) => <JobCard job={item} router={router} />}
+      onEndReached={getJobs}
+      onEndReachedThreshold={0.1}
+      ListFooterComponent={hasMore ? <Loading /> : null}
+      contentContainerStyle={styles.listContent}
+    />
+  );
+
+  const renderCategoriesList = () => (
+    <FlatList
+      key="categoriesList"
+      data={categories}
+      numColumns={2}
+      keyExtractor={(item) => item.id.toString()}
+      renderItem={({ item }) => (
+        <CategoryCard
+          category={item}
+          jobCount={categoryJobCounts[item.name] || 0}
+          onPress={handleCategoryPress}
+        />
+      )}
+      contentContainerStyle={styles.categoriesContainer}
+    />
+  );
+
+  const renderCompaniesList = () => (
+    <FlatList
+      key="companiesList"
+      data={companies}
+      keyExtractor={(item) => item.companyName}
+      renderItem={({ item }) => (
+        <CompanyCard company={item} onPress={handleCompanyPress} />
+      )}
+      contentContainerStyle={styles.companiesContainer}
+    />
+  );
+
   const renderContent = () => {
+    if (loading) return <Loading />;
+
     switch (activeTab) {
       case "Browse Categories":
-        return (
-          <FlatList
-            data={categories}
-            numColumns={2}
-            key={"categories"} // use 'categories' as the key when rendering categories
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => <CategoryCard category={item} />}
-            contentContainerStyle={styles.categoriesContainer}
-          />
-        );
+        return renderCategoriesList();
       case "Browse Companies":
-        return (
-          <FlatList
-            data={companies}
-            key={"companies"} // use 'companies' as the key when rendering companies
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => <CompanyCard company={item} />}
-            contentContainerStyle={styles.companiesContainer}
-          />
-        );
+        return renderCompaniesList();
       default:
-        return (
-          <FlatList
-            data={jobs}
-            showsVerticalScrollIndicator={false}
-            key={"jobs"} // use 'jobs' as the key when rendering jobs
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => <JobCard job={item} router={router} />}
-            onEndReached={getJobs}
-            onEndReachedThreshold={0.1}
-            ListFooterComponent={hasMore ? <Loading /> : null}
-            contentContainerStyle={styles.listContent}
-          />
-        );
+        return renderJobsList();
     }
   };
 

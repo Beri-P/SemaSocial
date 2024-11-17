@@ -114,11 +114,17 @@ const UserList = () => {
         return;
       }
 
+      // Get the correct otherUserId from the conversation
+      const otherUserId =
+        result.data.user1_id === currentUser.id
+          ? result.data.user2_id
+          : result.data.user1_id;
+
       router.push({
         pathname: "/(main)/chat/[conversationId]",
         params: {
           conversationId: result.data.id,
-          otherUserId: selectedUser.id,
+          otherUserId: otherUserId, // Use the correct otherUserId
           otherUserName: selectedUser.name,
         },
       });

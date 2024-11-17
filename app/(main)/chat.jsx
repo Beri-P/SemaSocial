@@ -35,16 +35,36 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import Avatar from "../../components/Avatar";
 
-const ChatHeader = ({ otherUser, onBack }) => {
+// Chat header to show other user's information
+const ChatHeader = ({ otherUser, onBack, loading = false }) => {
   const [imageError, setImageError] = useState(false);
 
   const renderProfileImage = () => {
-    if (!otherUser?.image || imageError) {
-      // Return a default avatar or placeholder
+    // Show loading spinner while user data is being fetched
+    if (loading) {
+      return (
+        <View style={styles.avatar}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+        </View>
+      );
+    }
+
+    // Show placeholder if no user data
+    if (!otherUser) {
+      return (
+        <View style={[styles.avatar, styles.avatarPlaceholder]}>
+          <Text style={styles.fallbackText}>?</Text>
+        </View>
+      );
+    }
+
+    const profileImage = otherUser.avatar_url || otherUser.image;
+
+    if (!profileImage || imageError) {
       return (
         <View style={[styles.avatar, styles.avatarPlaceholder]}>
           <Text style={styles.fallbackText}>
-            {otherUser?.name?.[0]?.toUpperCase()}
+            {otherUser.name?.[0]?.toUpperCase() || "?"}
           </Text>
         </View>
       );
@@ -52,10 +72,11 @@ const ChatHeader = ({ otherUser, onBack }) => {
 
     return (
       <Avatar
-        uri={otherUser?.image} // Pass the image URI to Avatar component
-        size={40} // You can customize the size as needed
-        fallback={otherUser?.name?.[0]?.toUpperCase()} // Use the first letter of the name as fallback
+        uri={profileImage}
+        size={40}
+        fallback={otherUser.name?.[0]?.toUpperCase()}
         style={styles.avatar}
+        onError={() => setImageError(true)}
       />
     );
   };
@@ -68,7 +89,7 @@ const ChatHeader = ({ otherUser, onBack }) => {
       <View style={styles.userInfo}>
         {renderProfileImage()}
         <View style={styles.userTextInfo}>
-          <Text style={styles.username}>{otherUser?.name || "User"}</Text>
+          <Text style={styles.username}>{otherUser?.name || "Loading..."}</Text>
           {otherUser?.bio && <Text style={styles.status}>{otherUser.bio}</Text>}
         </View>
       </View>
@@ -86,9 +107,26 @@ const Chat = () => {
   const [sending, setSending] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [otherUser, setOtherUser] = useState(null);
+  const [loadingUser, setLoadingUser] = useState(true);
   const flatListRef = useRef(null);
 
   useEffect(() => {
+    console.log(
+      "ChatScreen loaded with conversation ID:",
+      conversationId,
+      "and otherUserId:",
+      otherUserId
+    );
+
+    if (!conversationId || !otherUserId) {
+      console.error("Missing required parameters:", {
+        conversationId,
+        otherUserId,
+      });
+      router.back();
+      return;
+    }
+
     let messageSubscription;
 
     const loadMessages = async () => {
@@ -96,7 +134,7 @@ const Chat = () => {
         setLoading(true);
         const result = await fetchMessages(conversationId);
         if (result.success) {
-          setMessages(result.data.reverse());
+          setMessages(result.data);
           await markMessagesAsRead(conversationId, user.id);
         }
       } catch (error) {
@@ -108,23 +146,40 @@ const Chat = () => {
 
     const loadOtherUser = async () => {
       try {
+        setLoadingUser(true);
         const userResult = await fetchUserDetails(otherUserId);
-        if (userResult.success) {
+        if (userResult.success && userResult.data) {
           setOtherUser(userResult.data);
         }
       } catch (error) {
         console.error("Error loading user details:", error);
+      } finally {
+        setLoadingUser(false);
       }
     };
 
     const setupSubscription = () => {
-      messageSubscription = subscribeToMessages(user.id, (payload) => {
-        if (payload.new && payload.new.conversation_id === conversationId) {
-          setMessages((prev) => [payload.new, ...prev]);
-          markMessagesAsRead(conversationId, user.id);
-          scrollToBottom();
-        }
-      });
+      // Subscribe to both sent and received messages for this conversation
+      messageSubscription = supabase
+        .channel("messages")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "messages",
+            filter: `conversation_id=eq.${conversationId}`,
+          },
+          (payload) => {
+            if (payload.new && payload.new.conversation_id === conversationId) {
+              setMessages((prev) => [payload.new, ...prev]);
+              if (payload.new.sender_id !== user.id) {
+                markMessagesAsRead(conversationId, user.id);
+              }
+            }
+          }
+        )
+        .subscribe();
     };
 
     loadMessages();
@@ -149,21 +204,45 @@ const Chat = () => {
 
     try {
       setSending(true);
+      const messageText = inputText.trim();
+
+      // Optimistically add the message to the UI
+      const optimisticMessage = {
+        id: Date.now().toString(), // temporary ID
+        conversation_id: conversationId,
+        sender_id: user.id,
+        receiver_id: otherUserId,
+        message_text: messageText,
+        created_at: new Date().toISOString(),
+        attachments: [],
+        profiles: {
+          id: user.id,
+          name: user.name,
+          image: user.image,
+        },
+      };
+
+      setMessages((prev) => [optimisticMessage, ...prev]);
+      setInputText("");
+      setAttachments([]);
+
       const result = await sendMessage({
         conversationId,
         senderId: user.id,
-        text: inputText.trim(),
+        text: messageText,
         attachments,
       });
 
-      if (result.success) {
-        setMessages((prevMessages) => [result.data, ...prevMessages]);
-        setInputText("");
-        setAttachments([]);
-        scrollToBottom();
+      if (!result.success) {
+        // Remove the optimistic message if sending failed
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== optimisticMessage.id)
+        );
+        alert("Failed to send message");
       }
     } catch (error) {
       console.error("Error sending message:", error);
+      alert("Failed to send message");
     } finally {
       setSending(false);
     }
@@ -259,7 +338,7 @@ const Chat = () => {
     router.back();
   };
 
-  if (loading) {
+  if (loading || loadingUser) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -434,6 +513,16 @@ const styles = StyleSheet.create({
     zIndex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     borderRadius: 12,
+  },
+  avatarPlaceholder: {
+    backgroundColor: theme.colors.gray,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fallbackText: {
+    color: theme.colors.white,
+    fontSize: 18,
+    fontWeight: "bold",
   },
 });
 
