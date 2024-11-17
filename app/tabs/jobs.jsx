@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Alert,
 } from "react-native";
 import ScreenWrapper from "../../components/ScreenWrapper";
 import Icon from "../../assets/icons";
@@ -220,7 +221,10 @@ const Jobs = () => {
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerIcon}
-            onPress={() => router.push("/search")}
+            //onPress={() => router.push("/search")}
+            onPress={() =>
+              Alert.alert("Notice", "Search functionality not ready yet")
+            }
           >
             <Icon name="search" size={24} color={theme.colors.text} />
           </TouchableOpacity>

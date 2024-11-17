@@ -362,7 +362,7 @@ const ChatScreen = () => {
             contentContainerStyle={styles.messagesList}
             onContentSizeChange={scrollToBottom}
             onLayout={scrollToBottom}
-            inverted={true}
+            inverted={false}
           />
         </KeyboardAvoidingView>
 

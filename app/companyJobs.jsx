@@ -6,6 +6,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import ScreenWrapper from "../components/ScreenWrapper";
@@ -46,7 +47,12 @@ const CompanyJobs = () => {
           <Icon name="arrowLeft" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{companyName}</Text>
-        <TouchableOpacity onPress={() => router.push("/search")}>
+        <TouchableOpacity
+          //onPress={() => router.push("/search")}
+          onPress={() =>
+            Alert.alert("Notice", "Search functionality not ready yet")
+          }
+        >
           <Icon name="search" size={24} color={theme.colors.text} />
         </TouchableOpacity>
       </View>

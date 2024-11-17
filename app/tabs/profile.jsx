@@ -154,14 +154,12 @@ const Profile = ({ userId = null }) => {
         onPress: async () => {
           try {
             setIsLoggingOut(true); // Set logging out state
+            resetStates(); // Clear all local states first
 
-            // First clear all local states
-            resetStates();
-
-            // Then attempt to sign out
+            // Attempt to sign out
             if (signOut) {
               await signOut();
-              // The auth state change in AuthContext will handle navigation
+              // AuthContext's auth state listener will handle navigation
             }
           } catch (err) {
             console.error("Error during sign out:", err);
@@ -180,7 +178,11 @@ const Profile = ({ userId = null }) => {
 
   // Check if we're viewing our own profile with proper null check
   const isOwnProfile =
-    loggedInUser?.id && (!userId || userId === loggedInUser.id);
+    loggedInUser?.id && (!userId || userId === loggedInUser?.id);
+
+  if (loading || !profileUser) {
+    return <Loading />;
+  }
 
   return (
     <ScreenWrapper bg="white">
