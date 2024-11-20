@@ -26,15 +26,16 @@ import Icon from "../../assets/icons";
 import { useAuth } from "../../contexts/AuthContext";
 
 // Dropdown options
-const INDUSTRY_OPTIONS = [
-  { label: "Technology", value: "technology" },
-  { label: "Healthcare", value: "healthcare" },
-  { label: "Finance", value: "finance" },
-  { label: "Education", value: "education" },
-  { label: "Manufacturing", value: "manufacturing" },
-  { label: "Retail", value: "retail" },
-  { label: "Construction", value: "construction" },
+const CATEGORY_OPTIONS = [
+  { label: "Accounting", value: "accounting" },
+  { label: "Administration", value: "administration" },
   { label: "Hospitality", value: "hospitality" },
+  { label: "Audit", value: "audit" },
+  { label: "Media", value: "media" },
+  { label: "Automotive", value: "automotive" },
+  { label: "Architectural", value: "architectural" },
+  { label: "Agricultural", value: "agricultural" },
+  { label: "Programming", value: "programming" },
 ];
 
 const EMPLOYMENT_TYPE_OPTIONS = [
@@ -69,7 +70,7 @@ const STATUS_OPTIONS = [
   { label: "Expired", value: "expired" },
 ];
 
-const CATEGORY_OPTIONS = [
+const INDUSTRY_OPTIONS = [
   { label: "Software Development", value: "software_dev" },
   { label: "Design", value: "design" },
   { label: "Marketing", value: "marketing" },
@@ -111,32 +112,32 @@ const NewJob = () => {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const [jobDetails, setJobDetails] = useState({
-    companyName: "",
-    companyWebsite: "",
-    companyDescription: "",
-    industry: "",
     title: "",
-    customUrl: "",
+    industry: "",
     skills: "",
-    startDate: "",
     category: "",
-    shortDescription: "",
-    jobDescription: "",
     salary: "",
-    otherPays: "",
-    requiredExperience: "",
-    employmentType: "",
-    educationLevel: "",
-    contactName: "",
     email: "",
     phone: "",
     facebook: "",
-    website: "",
+    privacy: "All Registered Members",
+    status: "",
+    commentPrivacy: "All Registered Members",
+    employmentType: "",
+    companyName: "",
+    companyWebsite: "",
+    companyDescription: "",
+    customUrl: "",
+    startDate: "",
+    shortDescription: "",
+    jobDescription: "",
+    otherPays: "",
+    requiredExperience: "",
+    educationLevel: "",
+    contactName: "",
     jobContactEmail: "",
     linkForApply: "",
-    privacy: "All Registered Members",
-    commentPrivacy: "All Registered Members",
-    status: "",
+    jobWebsite: "",
   });
 
   useEffect(() => {
@@ -306,6 +307,12 @@ const NewJob = () => {
               onValueChange={(value) => handleInputChange("industry", value)}
               items={INDUSTRY_OPTIONS}
             />
+            <PickerField
+              label="Category"
+              value={jobDetails.category}
+              onValueChange={(value) => handleInputChange("category", value)}
+              items={CATEGORY_OPTIONS}
+            />
 
             <PickerField
               label="Employment Type"
@@ -335,6 +342,84 @@ const NewJob = () => {
                 placeholder="Detailed job description"
                 multiline
                 numberOfLines={6}
+              />
+            </FormField>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Social Media & Online Presence
+            </Text>
+            <FormField label="Facebook Profile">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.facebook}
+                onChangeText={(text) => handleInputChange("facebook", text)}
+                placeholder="Facebook profile URL"
+              />
+            </FormField>
+
+            <FormField label="Job Website">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.jobWebsite}
+                onChangeText={(text) => handleInputChange("jobWebsite", text)}
+                placeholder="Job website URL"
+              />
+            </FormField>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Additional Job Details</Text>
+            <FormField label="Job Contact Email">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.jobContactEmail}
+                onChangeText={(text) =>
+                  handleInputChange("jobContactEmail", text)
+                }
+                placeholder="Specific contact email for this job"
+                keyboardType="email-address"
+              />
+            </FormField>
+
+            <FormField label="Link to Apply">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.linkForApply}
+                onChangeText={(text) => handleInputChange("linkForApply", text)}
+                placeholder="External application link"
+              />
+            </FormField>
+
+            <FormField label="Short Description">
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={jobDetails.shortDescription}
+                onChangeText={(text) =>
+                  handleInputChange("shortDescription", text)
+                }
+                placeholder="Brief job summary"
+                multiline
+                numberOfLines={3}
+              />
+            </FormField>
+
+            <FormField label="Start Date">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.startDate}
+                onChangeText={(text) => handleInputChange("startDate", text)}
+                placeholder="Expected job start date"
+              />
+            </FormField>
+
+            <FormField label="Custom URL">
+              <TextInput
+                style={styles.input}
+                value={jobDetails.customUrl}
+                onChangeText={(text) => handleInputChange("customUrl", text)}
+                placeholder="Custom URL for this job posting"
               />
             </FormField>
           </View>

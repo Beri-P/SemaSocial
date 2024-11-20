@@ -33,7 +33,7 @@ export const fetchJobs = async (limit) => {
         email,
         phone,
         facebook,
-        website,
+        jobWebsite,
         jobContactEmail,
         linkForApply,
         privacy,
@@ -89,7 +89,7 @@ export const fetchJobsByCategory = async (category) => {
         email,
         phone,
         facebook,
-        website,
+        jobWebsite,
         jobContactEmail,
         linkForApply,
         privacy,
@@ -145,7 +145,7 @@ export const fetchJobsByCompany = async (companyName) => {
         email,
         phone,
         facebook,
-        website,
+        jobWebsite,
         jobContactEmail,
         linkForApply,
         privacy,
@@ -173,22 +173,79 @@ export const fetchJobsByCompany = async (companyName) => {
 // Create or update a job
 export const createOrUpdateJob = async (job) => {
   try {
-    console.log("Starting createOrUpdateJob with data:", job);
+    console.log(
+      "Starting createOrUpdateJob with data:",
+      JSON.stringify(job, null, 2)
+    );
+
+    // Validate required fields
+    if (!job.userId) {
+      console.error("Missing userId");
+      return {
+        success: false,
+        msg: "User ID is required to create or update a job",
+        errorType: "VALIDATION_ERROR",
+      };
+    }
+
+    if (!job.title) {
+      console.error("Missing job title");
+      return {
+        success: false,
+        msg: "Job title is required",
+        errorType: "VALIDATION_ERROR",
+      };
+    }
+    if (!job.companyName) {
+      console.error("Missing job company name");
+      return {
+        success: false,
+        msg: "Company Name is required",
+        errorType: "VALIDATION_ERROR",
+      };
+    }
+    if (!job.category) {
+      console.error("Missing job category");
+      return {
+        success: false,
+        msg: "Job Category is required",
+        errorType: "VALIDATION_ERROR",
+      };
+    }
 
     // Handle file upload if there's a new file
     if (job.file && typeof job.file === "object") {
-      console.log("Uploading file...");
-      const isImage = job?.file?.type === "image";
-      const folderName = isImage ? "jobImages" : "jobVideos";
-      const fileResult = await uploadFile(folderName, job?.file?.uri, isImage);
+      console.log("Attempting to upload file...");
+      try {
+        const isImage = job?.file?.type === "image";
+        const folderName = isImage ? "jobImages" : "jobVideos";
+        const fileResult = await uploadFile(
+          folderName,
+          job?.file?.uri,
+          isImage
+        );
 
-      console.log("File upload result:", fileResult);
+        console.log("File upload result:", JSON.stringify(fileResult, null, 2));
 
-      if (fileResult.success) {
-        job.file = fileResult.data;
-      } else {
-        console.error("File upload failed:", fileResult);
-        return fileResult;
+        if (fileResult.success) {
+          job.file = fileResult.data;
+        } else {
+          console.error("File upload failed:", fileResult);
+          return {
+            success: false,
+            msg: "Failed to upload job media file",
+            errorType: "FILE_UPLOAD_ERROR",
+            details: fileResult,
+          };
+        }
+      } catch (fileUploadError) {
+        console.error("Unexpected file upload error:", fileUploadError);
+        return {
+          success: false,
+          msg: "Unexpected error during file upload",
+          errorType: "FILE_UPLOAD_EXCEPTION",
+          details: fileUploadError.toString(),
+        };
       }
     }
 
@@ -215,13 +272,25 @@ export const createOrUpdateJob = async (job) => {
       commentPrivacy: job.commentPrivacy,
       status: job.status,
       updated_at: job.updated_at,
+      // Add new fields
+      facebook: job.facebook,
+      jobWebsite: job.jobWebsite,
+      jobContactEmail: job.jobContactEmail,
+      linkForApply: job.linkForApply,
+      shortDescription: job.shortDescription,
+      startDate: job.startDate,
+      customUrl: job.customUrl,
+      category: job.category,
     };
 
     if (job.id) {
       jobData.id = job.id;
     }
 
-    console.log("Sending to Supabase:", jobData);
+    console.log(
+      "Prepared job data for Supabase:",
+      JSON.stringify(jobData, null, 2)
+    );
 
     const { data, error } = await supabase
       .from("jobs")
@@ -230,20 +299,24 @@ export const createOrUpdateJob = async (job) => {
       .single();
 
     if (error) {
-      console.error("Supabase error:", error);
+      console.error("Supabase database error:", JSON.stringify(error, null, 2));
       return {
         success: false,
         msg: error.message || "Failed to create/update the job",
+        errorType: "SUPABASE_ERROR",
+        details: error,
       };
     }
 
-    console.log("Job saved successfully:", data);
+    console.log("Job saved successfully:", JSON.stringify(data, null, 2));
     return { success: true, data };
   } catch (error) {
-    console.error("createOrUpdateJob error:", error);
+    console.error("Unhandled createOrUpdateJob error:", error);
     return {
       success: false,
-      msg: error.message || "An unexpected error occurred",
+      msg: "An unexpected error occurred during job creation/update",
+      errorType: "UNEXPECTED_ERROR",
+      details: error.toString(),
     };
   }
 };
@@ -314,7 +387,7 @@ export const fetchJobDetails = async (jobId) => {
         email,
         phone,
         facebook,
-        website,
+        jobWebsite,
         jobContactEmail,
         linkForApply,
         privacy,

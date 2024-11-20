@@ -6,6 +6,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  RefreshControl,
   Image,
   Alert,
 } from "react-native";
@@ -40,7 +41,7 @@ const CategoryCard = ({ category, jobCount, onPress }) => (
       <Icon name={category.icon} size={40} color={theme.colors.primary} />
     </View>
     <Text style={styles.categoryName}>{category.name}</Text>
-    <Text style={styles.categoryJobs}>{jobCount} jobs</Text>
+    <Text style={styles.categoryJobs}>{jobCount} job(s)</Text>
   </TouchableOpacity>
 );
 
@@ -51,7 +52,7 @@ const CompanyCard = ({ company, onPress }) => (
       <Text style={styles.companyCategory}>{company.industry}</Text>
       <View style={styles.companyStats}>
         <Icon name="job" size={16} color={theme.colors.textLight} />
-        <Text style={styles.statText}>{company.jobCount} jobs</Text>
+        <Text style={styles.statText}>{company.jobCount} job(s)</Text>
       </View>
     </View>
   </TouchableOpacity>
@@ -64,6 +65,7 @@ const Jobs = () => {
   const [categoryJobCounts, setCategoryJobCounts] = useState({});
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
   const limit = 10;
 
@@ -77,18 +79,62 @@ const Jobs = () => {
     }
   }, [activeTab]);
 
-  const getJobs = async () => {
-    if (!hasMore) return;
-    const res = await fetchJobs(limit);
-    if (res.success) {
-      if (jobs.length === res.data.length) setHasMore(false);
-      setJobs(res.data);
+  const getJobs = async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+        setHasMore(true); // Reset hasMore when refreshing
+      } else if (!hasMore) return;
+
+      const res = await fetchJobs(limit);
+      if (res.success) {
+        // Add a unique refresh timestamp to each job during refresh
+        const processedData = res.data.map((job) => ({
+          ...job,
+          _refreshTimestamp: isRefresh ? Date.now() : undefined,
+        }));
+
+        // If refreshing, replace jobs entirely
+        if (isRefresh) {
+          setJobs(processedData);
+        } else {
+          // Otherwise, append jobs (for pagination)
+          setJobs((prevJobs) => [...prevJobs, ...processedData]);
+        }
+
+        // Check if we have reached the end of available jobs
+        if (res.data.length < limit) {
+          setHasMore(false);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching jobs:", error);
+      Alert.alert("Error", "Failed to fetch jobs");
+    } finally {
+      setLoading(false);
+      if (isRefresh) setRefreshing(false);
     }
-    setLoading(false);
   };
 
-  const getCompanies = async () => {
+  const onRefresh = () => {
+    // Call refresh method based on active tab
+    switch (activeTab) {
+      case "Browse Job":
+        getJobs(true);
+        break;
+      case "Browse Companies":
+        getCompanies(true);
+        break;
+      case "Browse Categories":
+        getCategoryJobCounts();
+        break;
+    }
+  };
+
+  const getCompanies = async (isRefresh = false) => {
     try {
+      if (isRefresh) setRefreshing(true);
+
       const res = await fetchJobs(1000); // Fetch a large number of jobs to process company data
       if (res.success) {
         // Process jobs to get unique companies with job counts
@@ -109,8 +155,11 @@ const Jobs = () => {
       }
     } catch (error) {
       console.error("Error fetching companies:", error);
+      Alert.alert("Error", "Failed to fetch companies");
+    } finally {
+      setLoading(false);
+      if (isRefresh) setRefreshing(false);
     }
-    setLoading(false);
   };
 
   const getCategoryJobCounts = async () => {
@@ -152,12 +201,27 @@ const Jobs = () => {
       key="jobsList"
       data={jobs}
       showsVerticalScrollIndicator={false}
-      keyExtractor={(item) => item.id.toString()}
+      keyExtractor={(item, index) => {
+        // Use a combination of id, index, and refresh timestamp for truly unique keys
+        const baseKey = item?.id ? `job-${item.id}` : `index-${index}`;
+        const refreshKey = item?._refreshTimestamp
+          ? `-refresh-${item._refreshTimestamp}`
+          : "";
+        return `${baseKey}${refreshKey}`;
+      }}
       renderItem={({ item }) => <JobCard job={item} router={router} />}
-      onEndReached={getJobs}
+      onEndReached={() => getJobs(false)}
       onEndReachedThreshold={0.1}
       ListFooterComponent={hasMore ? <Loading /> : null}
       contentContainerStyle={styles.listContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[theme.colors.primary]}
+          tintColor={theme.colors.primary}
+        />
+      }
     />
   );
 
@@ -187,6 +251,15 @@ const Jobs = () => {
         <CompanyCard company={item} onPress={handleCompanyPress} />
       )}
       contentContainerStyle={styles.companiesContainer}
+      refreshControl={
+        // Added RefreshControl to companies list
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[theme.colors.primary]}
+          tintColor={theme.colors.primary}
+        />
+      }
     />
   );
 
